@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,6 +27,7 @@ from backend.models.gemini_live import GeminiLiveSession
 from backend.models.composite import composite_risk
 from backend.classifier.scam_intent import ScamIntentClassifier
 from backend.classifier.behavioral import BehavioralAnalyzer
+from backend.auth import get_current_user, get_user_profile, update_user_profile, MOCK_MODE as AUTH_MOCK
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("moneyspeaks")
@@ -74,20 +75,6 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
-
-
-# --- Health check ---
-@app.get("/health")
-async def health():
-    return {
-        "status": "ok",
-        "models": {
-            "deepfake": {"mock": deepfake_detector.mock_mode},
-            "gemini": {"mock": gemini_session.mock_mode},
-            "scam_intent": {"mock": scam_classifier.mock_mode},
-            "behavioral": {"mock": behavioral_analyzer.mock_mode},
-        },
-    }
 
 
 # --- Audio pipeline processing ---
@@ -182,6 +169,92 @@ async def ws_dashboard(websocket: WebSocket):
     except Exception as e:
         logger.error(f"Dashboard WebSocket error: {e}")
         manager.disconnect_dashboard(websocket)
+
+
+# --- User profile endpoints ---
+@app.get("/api/me")
+async def get_me(user: dict = Depends(get_current_user)):
+    """Get current user profile."""
+    profile = get_user_profile(user["sub"])
+    return {**user, **profile}
+
+
+@app.put("/api/me")
+async def update_me(request: Request, user: dict = Depends(get_current_user)):
+    """Update current user profile (bank number, trusted contacts)."""
+    body = await request.json()
+    profile = update_user_profile(user["sub"], body)
+    return profile
+
+
+@app.post("/api/me/trusted-contacts")
+async def add_trusted_contact(request: Request, user: dict = Depends(get_current_user)):
+    """Add a trusted contact to the user's profile."""
+    body = await request.json()
+    name = body.get("name", "").strip()
+    phone = body.get("phone", "").strip()
+    if not name or not phone:
+        return JSONResponse(status_code=400, content={"error": "Name and phone are required"})
+
+    profile = get_user_profile(user["sub"])
+    contacts = profile.get("trusted_contacts", [])
+    contacts.append({"name": name, "phone": phone})
+    profile["trusted_contacts"] = contacts
+    return {"contacts": contacts}
+
+
+@app.delete("/api/me/trusted-contacts/{index}")
+async def remove_trusted_contact(index: int, user: dict = Depends(get_current_user)):
+    """Remove a trusted contact by index."""
+    profile = get_user_profile(user["sub"])
+    contacts = profile.get("trusted_contacts", [])
+    if 0 <= index < len(contacts):
+        removed = contacts.pop(index)
+        profile["trusted_contacts"] = contacts
+        return {"removed": removed, "contacts": contacts}
+    return JSONResponse(status_code=404, content={"error": "Contact not found"})
+
+
+@app.post("/api/notify")
+async def notify_trusted_contacts(request: Request, user: dict = Depends(get_current_user)):
+    """Send notification to all trusted contacts about a flagged call.
+
+    In mock mode, just logs the notification. Real mode would send SMS.
+    """
+    body = await request.json()
+    risk_level = body.get("risk_level", "high")
+    profile = get_user_profile(user["sub"])
+    contacts = profile.get("trusted_contacts", [])
+
+    if not contacts:
+        return JSONResponse(status_code=400, content={"error": "No trusted contacts configured"})
+
+    notifications = []
+    for contact in contacts:
+        # In production: send SMS via Twilio/similar
+        logger.info(f"NOTIFY {contact['name']} ({contact['phone']}): flagged call, risk={risk_level}")
+        notifications.append({
+            "contact": contact["name"],
+            "phone": contact["phone"],
+            "status": "sent" if not AUTH_MOCK else "mock_sent",
+        })
+
+    return {"notifications": notifications}
+
+
+# --- Health check (updated) ---
+@app.get("/health")
+async def health_updated():
+    return {
+        "status": "ok",
+        "models": {
+            "deepfake": {"mock": deepfake_detector.mock_mode},
+            "gemini": {"mock": gemini_session.mock_mode},
+            "scam_intent": {"mock": scam_classifier.mock_mode},
+            "behavioral": {"mock": behavioral_analyzer.mock_mode},
+            "auth": {"mock": AUTH_MOCK},
+        },
+    }
 
 
 # --- Demo endpoint ---
