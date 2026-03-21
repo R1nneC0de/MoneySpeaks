@@ -7,6 +7,7 @@ import DemoPlayer from './components/DemoPlayer'
 import TrustedContact from './components/TrustedContact'
 import { useAudioCapture } from './hooks/useAudioCapture'
 import { useDashboard } from './hooks/useDashboard'
+import { useAuth } from './auth/AuthProvider'
 
 // TTS warning phrases — plays via browser SpeechSynthesis (zero-key fallback)
 const WARNINGS = {
@@ -54,10 +55,21 @@ export default function App() {
     runDemo,
     reset,
   } = useDashboard()
+  const {
+    isAuthenticated, isLoading, user, profile, mockMode,
+    login, logout, updateProfile, addTrustedContact, removeTrustedContact, notifyContacts,
+  } = useAuth()
 
   const lastSpokenRef = useRef(0)
   const [bankNumber, setBankNumber] = useState('')
   const [showBankInput, setShowBankInput] = useState(false)
+
+  // Sync bank number from profile
+  useEffect(() => {
+    if (profile?.bank_number) {
+      setBankNumber(profile.bank_number)
+    }
+  }, [profile])
 
   // Speak warnings on risk level changes
   useEffect(() => {
@@ -78,14 +90,35 @@ export default function App() {
             <h1 className="text-2xl font-bold">MoneySpeaks</h1>
             <p className="text-sm text-gray-400">Real-time voice scam detection</p>
           </div>
-          <div className="flex items-center gap-3">
-            <span
-              className={`w-2.5 h-2.5 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`}
-              title={connected ? 'Connected' : 'Disconnected'}
-            />
-            <span className="text-xs text-gray-400">
-              {connected ? 'Live' : 'Connecting...'}
-            </span>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-2.5 h-2.5 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`}
+                title={connected ? 'Connected' : 'Disconnected'}
+              />
+              <span className="text-xs text-gray-400">
+                {connected ? 'Live' : 'Connecting...'}
+              </span>
+            </div>
+            {isAuthenticated ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-300">{user?.name || user?.email || 'User'}</span>
+                {mockMode && <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded">demo</span>}
+                <button
+                  onClick={logout}
+                  className="text-xs text-gray-400 hover:text-white transition-colors"
+                >
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={login}
+                className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                Login
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -126,7 +159,10 @@ export default function App() {
                                      px-4 py-3 text-base text-white"
                         />
                         <button
-                          onClick={() => setShowBankInput(false)}
+                          onClick={() => {
+                            updateProfile({ bank_number: bankNumber })
+                            setShowBankInput(false)
+                          }}
                           className="bg-blue-600 px-4 py-3 rounded-lg font-medium"
                         >
                           Save
@@ -164,7 +200,13 @@ export default function App() {
               </div>
             </div>
 
-            <TrustedContact riskLevel={compositeLevel} />
+            <TrustedContact
+              riskLevel={compositeLevel}
+              contacts={profile?.trusted_contacts || []}
+              onAddContact={addTrustedContact}
+              onRemoveContact={removeTrustedContact}
+              onNotify={() => notifyContacts(compositeLevel)}
+            />
           </div>
 
           {/* Right column — Data panels */}

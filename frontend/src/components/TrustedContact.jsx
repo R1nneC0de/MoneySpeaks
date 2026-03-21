@@ -2,28 +2,47 @@ import React, { useState } from 'react'
 
 /**
  * Post-call trusted contact notification.
- * Allows users to set up family members to be notified after flagged calls.
+ * Contacts are persisted via backend API (Auth0-backed profile).
  */
-export default function TrustedContact({ riskLevel = 'low' }) {
-  const [contacts, setContacts] = useState([])
+export default function TrustedContact({
+  riskLevel = 'low',
+  contacts = [],
+  onAddContact,
+  onRemoveContact,
+  onNotify,
+}) {
   const [showForm, setShowForm] = useState(false)
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [notified, setNotified] = useState(false)
+  const [saving, setSaving] = useState(false)
 
-  const addContact = () => {
-    if (name && phone) {
-      setContacts((prev) => [...prev, { name, phone }])
-      setName('')
-      setPhone('')
-      setShowForm(false)
+  const addContact = async () => {
+    if (name && phone && onAddContact) {
+      setSaving(true)
+      try {
+        await onAddContact(name, phone)
+        setName('')
+        setPhone('')
+        setShowForm(false)
+      } catch (e) {
+        console.error('Failed to add contact:', e)
+      } finally {
+        setSaving(false)
+      }
     }
   }
 
-  const notifyContacts = () => {
-    // In real mode, this would send SMS via backend
-    setNotified(true)
-    setTimeout(() => setNotified(false), 3000)
+  const handleNotify = async () => {
+    if (onNotify) {
+      setNotified(true)
+      try {
+        await onNotify()
+      } catch (e) {
+        console.error('Failed to notify:', e)
+      }
+      setTimeout(() => setNotified(false), 3000)
+    }
   }
 
   return (
@@ -66,10 +85,11 @@ export default function TrustedContact({ riskLevel = 'low' }) {
           <div className="flex gap-2">
             <button
               onClick={addContact}
+              disabled={saving}
               className="bg-green-600 hover:bg-green-500 text-white px-4 py-2
-                         rounded-lg font-medium transition-colors"
+                         rounded-lg font-medium transition-colors disabled:opacity-50"
             >
-              Save
+              {saving ? 'Saving...' : 'Save'}
             </button>
             <button
               onClick={() => setShowForm(false)}
@@ -88,14 +108,23 @@ export default function TrustedContact({ riskLevel = 'low' }) {
             {contacts.map((c, i) => (
               <li key={i} className="flex items-center justify-between text-sm">
                 <span>{c.name}</span>
-                <span className="text-gray-400">{c.phone}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-400">{c.phone}</span>
+                  <button
+                    onClick={() => onRemoveContact && onRemoveContact(i)}
+                    className="text-red-400 hover:text-red-300 text-xs"
+                    title="Remove contact"
+                  >
+                    remove
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
 
           {riskLevel === 'high' && (
             <button
-              onClick={notifyContacts}
+              onClick={handleNotify}
               disabled={notified}
               className="w-full bg-red-600 hover:bg-red-500 text-white px-4 py-3
                          rounded-xl font-semibold min-h-[64px] transition-colors
