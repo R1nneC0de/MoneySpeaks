@@ -72,7 +72,7 @@ class GeminiLiveSession:
             import google.generativeai as genai
 
             genai.configure(api_key=GEMINI_API_KEY)
-            self.client = genai.GenerativeModel("gemini-2.5-flash-preview-native-audio-dialog")
+            self.client = genai.GenerativeModel("gemini-2.5-flash")
             logger.info("Gemini Live session started")
         except Exception as e:
             logger.error(f"Failed to start Gemini session: {e} — falling back to MOCK")

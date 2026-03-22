@@ -135,7 +135,7 @@ class ScamIntentClassifier:
         import google.generativeai as genai
 
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")
+        model = genai.GenerativeModel("gemini-2.5-flash")
         response = await asyncio.to_thread(model.generate_content, prompt)
         text = response.text.strip()
         if text.startswith("```"):

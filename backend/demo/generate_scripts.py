@@ -70,7 +70,7 @@ def generate_scripts_with_gemini():
         return get_hardcoded_scripts()
 
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")
+    model = genai.GenerativeModel("gemini-2.5-flash")
 
     scripts = {}
     for name, config in SCRIPTS.items():
