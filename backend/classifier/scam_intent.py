@@ -1,7 +1,7 @@
 """Zero-shot LLM-based scam intent classifier.
 
 Runs on accumulated transcript every 15-30 seconds (not every 2s chunk).
-Real mode: uses Claude or Gemini text API.
+Real mode: uses Gemini text API.
 Mock mode: keyword-based heuristic scoring.
 """
 
@@ -14,7 +14,6 @@ from typing import Optional
 
 logger = logging.getLogger("moneyspeaks.scam_intent")
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 CLASSIFICATION_PROMPT = """You are a scam detection classifier. Analyze this phone call transcript for scam indicators.
@@ -52,7 +51,7 @@ class ScamIntentClassifier:
     """Classifies scam intent from rolling transcript."""
 
     def __init__(self):
-        self.mock_mode = not (ANTHROPIC_API_KEY or GEMINI_API_KEY)
+        self.mock_mode = not GEMINI_API_KEY
         self._last_run = 0
         self._run_interval = 20  # seconds between classifications
         self._transcript_buffer = ""
@@ -127,27 +126,10 @@ class ScamIntentClassifier:
         prompt = CLASSIFICATION_PROMPT.format(transcript=self._transcript_buffer[-2000:])
 
         try:
-            if ANTHROPIC_API_KEY:
-                return await self._classify_with_claude(prompt)
-            elif GEMINI_API_KEY:
-                return await self._classify_with_gemini(prompt)
+            return await self._classify_with_gemini(prompt)
         except Exception as e:
             logger.error(f"Classification failed: {e}")
             return self._mock_classify()
-
-    async def _classify_with_claude(self, prompt: str) -> dict:
-        import anthropic
-
-        client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
-        response = await client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=500,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = response.content[0].text.strip()
-        result = json.loads(text)
-        result["mock"] = False
-        return result
 
     async def _classify_with_gemini(self, prompt: str) -> dict:
         import google.generativeai as genai

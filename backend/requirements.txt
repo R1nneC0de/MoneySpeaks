@@ -8,7 +8,6 @@ torchaudio==2.5.1
 webrtcvad==2.0.10
 google-generativeai==0.8.4
 elevenlabs==1.50.5
-anthropic==0.40.0
 authlib==1.4.0
 httpx==0.28.1
 python-multipart==0.0.18
