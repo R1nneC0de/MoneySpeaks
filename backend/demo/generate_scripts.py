@@ -12,6 +12,11 @@ import os
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load backend/.env so keys are available
+load_dotenv(Path(__file__).parent.parent / ".env")
+
 DEMO_DIR = Path(__file__).parent
 
 SCRIPTS = {

@@ -12,6 +12,12 @@ import json
 import time
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent.parent.parent / "backend" / ".env")
+except ImportError:
+    pass
+
 OUTPUT_DIR = Path(__file__).parent / "data" / "elevenlabs"
 
 # Sample sentences for TTS generation — diverse content for robust detection
