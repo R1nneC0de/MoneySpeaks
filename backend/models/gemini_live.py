@@ -94,102 +94,49 @@ class GeminiLiveSession:
         hint = scenario_hint.lower()
         chunk = self._chunk_count
 
-        if "bank" in hint or "impersonation" in hint:
+        if "bank" in hint and "impersonation" in hint:
             return self._mock_bank_scenario(chunk)
-        elif "grandparent" in hint or "scam" in hint:
-            return self._mock_grandparent_scenario(chunk)
-        elif "real" in hint or "customer" in hint or "legitimate" in hint:
-            return self._mock_real_scenario(chunk)
+        elif "investment" in hint:
+            return self._mock_investment_scenario(chunk)
+        elif "legitimate" in hint:
+            return self._mock_legitimate_scenario(chunk)
         else:
             return self._mock_neutral()
 
     def _mock_bank_scenario(self, chunk: int) -> dict:
-        phases = [
-            {
-                "transcript": "Hello, this is the fraud department at your bank. We've detected unauthorized activity on your account. Oh my goodness, what kind of activity?",
-                "tone_flags": ["false_authority"],
-                "phrase_flags": ["fraud department", "unauthorized activity"],
-                "escalation_score": 35,
-                "reasoning": "Caller claims bank authority and reports urgent account activity. Monitoring for further indicators.",
-            },
-            {
-                "transcript": "Someone is attempting to transfer funds from your savings. We need to verify your identity immediately. Oh no, what do I need to do?",
-                "tone_flags": ["urgency", "false_authority"],
-                "phrase_flags": ["verify your identity", "transfer funds"],
-                "escalation_score": 60,
-                "reasoning": "Urgency combined with identity verification request. Victim is complying. Escalating risk.",
-            },
-            {
-                "transcript": "I'll need your account number and PIN to secure your funds. Okay, let me find my card. Please hurry, the transfer is still in progress.",
-                "tone_flags": ["urgency", "fear_induction"],
-                "phrase_flags": ["account number", "PIN", "secure your funds"],
-                "escalation_score": 85,
-                "reasoning": "Requesting sensitive credentials over phone with time pressure. High-confidence scam pattern.",
-            },
-            {
-                "transcript": "Don't hang up or contact anyone else. This is time-sensitive and we need to keep this line open to protect your savings.",
-                "tone_flags": ["urgency", "fear_induction", "isolation_tactics"],
-                "phrase_flags": ["don't contact anyone", "time-sensitive"],
-                "escalation_score": 95,
-                "reasoning": "Maximum risk: isolation demand, financial threat, urgency. Classic bank fraud script.",
-            },
-        ]
-        idx = min(chunk - 1, len(phases) - 1)
-        return {**phases[idx], "mock": True}
+        """Mock fallback — only used when GEMINI_API_KEY is missing."""
+        score = min(20 + chunk * 20, 95)
+        return {
+            "transcript": "[mock — no API key] Bank fraud scenario in progress...",
+            "tone_flags": ["urgency", "false_authority"] if chunk > 1 else ["false_authority"],
+            "phrase_flags": ["fraud department"] if chunk <= 2 else ["account number", "PIN", "don't contact anyone"],
+            "escalation_score": score,
+            "reasoning": f"Mock mode. Chunk {chunk} of bank impersonation scenario.",
+            "mock": True,
+        }
 
-    def _mock_grandparent_scenario(self, chunk: int) -> dict:
-        phases = [
-            {
-                "transcript": "Grandma? It's me, I'm in trouble. Who is this? Tommy, is that you? You sound different.",
-                "tone_flags": ["sympathy_exploitation"],
-                "phrase_flags": [],
-                "escalation_score": 25,
-                "reasoning": "Emotional opening with identity claim. Victim questioning voice difference is notable.",
-            },
-            {
-                "transcript": "Yeah it's me, I hurt my nose in the accident. I'm at the police station. Oh my Lord, are you okay?",
-                "tone_flags": ["sympathy_exploitation", "isolation_tactics"],
-                "phrase_flags": ["accident", "police station"],
-                "escalation_score": 55,
-                "reasoning": "Excuse for voice mismatch plus distress scenario. Classic grandparent scam setup.",
-            },
-            {
-                "transcript": "I need bail money right away. Can you get some gift cards? I need two thousand dollars. And please don't tell Mom and Dad.",
-                "tone_flags": ["urgency", "sympathy_exploitation", "isolation_tactics"],
-                "phrase_flags": ["gift cards", "don't tell", "right away", "bail money"],
-                "escalation_score": 90,
-                "reasoning": "Gift card payment request plus secrecy demand. Definitive scam indicators.",
-            },
-        ]
-        idx = min(chunk - 1, len(phases) - 1)
-        return {**phases[idx], "mock": True}
+    def _mock_investment_scenario(self, chunk: int) -> dict:
+        """Mock fallback — only used when GEMINI_API_KEY is missing."""
+        score = min(15 + chunk * 18, 90)
+        return {
+            "transcript": "[mock — no API key] Investment scam scenario in progress...",
+            "tone_flags": ["urgency", "false_authority"] if chunk > 1 else [],
+            "phrase_flags": ["guaranteed returns"] if chunk <= 2 else ["wire transfer", "limited time", "don't tell"],
+            "escalation_score": score,
+            "reasoning": f"Mock mode. Chunk {chunk} of investment scam scenario.",
+            "mock": True,
+        }
 
-    def _mock_real_scenario(self, chunk: int) -> dict:
-        phases = [
-            {
-                "transcript": "Hi, I'm calling about the appointment for next Tuesday at 2pm. Of course, let me pull that up. Yes, Tuesday the 25th at 2 o'clock.",
-                "tone_flags": [],
-                "phrase_flags": [],
-                "escalation_score": 3,
-                "reasoning": "Normal conversational tone between caller and receptionist. No suspicious indicators.",
-            },
-            {
-                "transcript": "I just wanted to confirm and let you know I might be a few minutes late. Traffic has been terrible. That's no problem at all, we'll be ready for you.",
-                "tone_flags": [],
-                "phrase_flags": [],
-                "escalation_score": 2,
-                "reasoning": "Polite, low-pressure exchange. Routine scheduling conversation.",
-            },
-            {
-                "transcript": "Great, thank you so much. I'll see you then! Sounds good, have a wonderful day!",
-                "tone_flags": [],
-                "phrase_flags": [],
-                "escalation_score": 1,
-                "reasoning": "Normal call conclusion. No risk detected.",
-            },
-        ]
-        idx = min(chunk - 1, len(phases) - 1)
-        return {**phases[idx], "mock": True}
+    def _mock_legitimate_scenario(self, chunk: int) -> dict:
+        """Mock fallback — only used when GEMINI_API_KEY is missing."""
+        return {
+            "transcript": "[mock — no API key] Legitimate bank call in progress...",
+            "tone_flags": [],
+            "phrase_flags": [],
+            "escalation_score": max(5 - chunk, 1),
+            "reasoning": f"Mock mode. Chunk {chunk} of legitimate call scenario.",
+            "mock": True,
+        }
 
     def _mock_neutral(self) -> dict:
         return {

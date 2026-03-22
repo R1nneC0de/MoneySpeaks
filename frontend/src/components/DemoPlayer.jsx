@@ -2,23 +2,23 @@ import React from 'react'
 
 const SCENARIOS = [
   {
-    id: 'real_customer',
-    label: 'Real Customer',
-    description: 'Legitimate call — should stay green',
+    id: 'legitimate_bank_call',
+    label: 'Legitimate Bank Call',
+    description: 'Real call about a charge — should stay green',
     color: 'bg-green-600 hover:bg-green-500',
     order: 1,
   },
   {
     id: 'bank_impersonation',
     label: 'Bank Fraud',
-    description: 'Impersonates fraud department',
+    description: 'Impersonates bank fraud department',
     color: 'bg-red-600 hover:bg-red-500',
     order: 2,
   },
   {
-    id: 'grandparent_scam',
-    label: 'Grandparent Scam',
-    description: 'Emotional manipulation attack',
+    id: 'investment_scam',
+    label: 'Investment Scam',
+    description: 'Fake high-return investment pitch',
     color: 'bg-orange-600 hover:bg-orange-500',
     order: 3,
   },

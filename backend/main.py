@@ -262,8 +262,8 @@ DEMO_DIR = Path(__file__).parent / "demo"
 
 DEMO_SCENARIOS = {
     "bank_impersonation": {"file": "bank_impersonation.mp3", "hint": "bank_impersonation"},
-    "grandparent_scam": {"file": "grandparent_scam.mp3", "hint": "grandparent_scam"},
-    "real_customer": {"file": "real_customer.mp3", "hint": "real_customer"},
+    "investment_scam": {"file": "investment_scam.mp3", "hint": "investment_scam"},
+    "legitimate_bank_call": {"file": "legitimate_bank_call.mp3", "hint": "legitimate_bank_call"},
 }
 
 
