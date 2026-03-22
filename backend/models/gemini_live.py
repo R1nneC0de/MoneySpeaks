@@ -18,6 +18,7 @@ import numpy as np
 logger = logging.getLogger("moneyspeaks.gemini_live")
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = "gemini-2.5-flash"
 
 SYSTEM_PROMPT = """You are MoneySpeaks, a real-time phone call scam detection system.
 You analyze audio from phone calls to detect social engineering, emotional manipulation,
@@ -69,10 +70,9 @@ class GeminiLiveSession:
             return
 
         try:
-            import google.generativeai as genai
+            from google import genai
 
-            genai.configure(api_key=GEMINI_API_KEY)
-            self.client = genai.GenerativeModel("gemini-2.5-flash")
+            self.client = genai.Client(api_key=GEMINI_API_KEY)
             logger.info("Gemini Live session started")
         except Exception as e:
             logger.error(f"Failed to start Gemini session: {e} — falling back to MOCK")
@@ -207,15 +207,14 @@ class GeminiLiveSession:
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                import google.generativeai as genai
-
                 # Convert float32 audio to base64-encoded PCM16
                 pcm16 = (np.clip(audio_chunk, -1.0, 1.0) * 32767).astype(np.int16)
                 audio_b64 = base64.b64encode(pcm16.tobytes()).decode("utf-8")
 
                 response = await asyncio.to_thread(
-                    self.client.generate_content,
-                    [
+                    self.client.models.generate_content,
+                    model=GEMINI_MODEL,
+                    contents=[
                         SYSTEM_PROMPT,
                         {"mime_type": "audio/pcm", "data": audio_b64},
                         "Analyze this audio segment. Respond with JSON only.",

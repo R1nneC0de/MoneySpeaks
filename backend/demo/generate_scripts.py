@@ -59,9 +59,9 @@ Keep it under 30 seconds. Write only the caller's dialogue.""",
 def generate_scripts_with_gemini():
     """Use Gemini to write scam/legitimate scripts."""
     try:
-        import google.generativeai as genai
+        from google import genai
     except ImportError:
-        print("google-generativeai not installed. Using hardcoded scripts.")
+        print("google-genai not installed. Using hardcoded scripts.")
         return get_hardcoded_scripts()
 
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -69,14 +69,16 @@ def generate_scripts_with_gemini():
         print("No GEMINI_API_KEY. Using hardcoded scripts.")
         return get_hardcoded_scripts()
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    client = genai.Client(api_key=api_key)
 
     scripts = {}
     for name, config in SCRIPTS.items():
         print(f"Generating script: {name}...")
         try:
-            response = model.generate_content(config["prompt"])
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=config["prompt"],
+            )
             scripts[name] = {
                 "text": response.text,
                 "voice_id": config["voice_id"],

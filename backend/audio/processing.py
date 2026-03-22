@@ -61,15 +61,36 @@ def _decode_wav(raw: bytes) -> np.ndarray:
 
 
 def _decode_mp3(raw: bytes) -> np.ndarray:
-    try:
-        from pydub import AudioSegment
-    except ImportError:
-        raise ImportError("pydub required for MP3 decoding. Install with: pip install pydub")
+    """Decode MP3 using ffmpeg subprocess (no pydub needed, works on Python 3.13)."""
+    import subprocess
+    import shutil
 
-    buf = io.BytesIO(raw)
-    audio = AudioSegment.from_mp3(buf)
-    audio = audio.set_channels(1).set_frame_rate(TARGET_SAMPLE_RATE).set_sample_width(2)
-    samples = np.array(audio.get_array_of_samples(), dtype=np.float32) / 32768.0
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        raise RuntimeError(
+            "ffmpeg not found. Install ffmpeg and ensure it's on your PATH.\n"
+            "  Windows: winget install ffmpeg  OR  choco install ffmpeg\n"
+            "  Mac: brew install ffmpeg\n"
+            "  Linux: sudo apt install ffmpeg"
+        )
+
+    # Pipe MP3 bytes into ffmpeg, output raw PCM16 mono 16kHz
+    cmd = [
+        ffmpeg, "-i", "pipe:0",
+        "-f", "s16le",       # raw PCM 16-bit signed little-endian
+        "-acodec", "pcm_s16le",
+        "-ar", str(TARGET_SAMPLE_RATE),
+        "-ac", "1",          # mono
+        "pipe:1",
+    ]
+    proc = subprocess.run(
+        cmd, input=raw, capture_output=True, timeout=30,
+    )
+    if proc.returncode != 0:
+        stderr = proc.stderr.decode("utf-8", errors="replace")[:500]
+        raise RuntimeError(f"ffmpeg failed: {stderr}")
+
+    samples = np.frombuffer(proc.stdout, dtype=np.int16).astype(np.float32) / 32768.0
     return samples
 
 

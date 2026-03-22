@@ -144,11 +144,14 @@ class ScamIntentClassifier:
                 return self._mock_classify()
 
     async def _classify_with_gemini(self, prompt: str) -> dict:
-        import google.generativeai as genai
+        from google import genai
 
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.5-flash")
-        response = await asyncio.to_thread(model.generate_content, prompt)
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model="gemini-2.5-flash",
+            contents=prompt,
+        )
         text = response.text.strip()
         if text.startswith("```"):
             text = text.split("```")[1]
