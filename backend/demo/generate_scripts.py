@@ -19,45 +19,54 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 
 DEMO_DIR = Path(__file__).parent
 
+# Voice IDs: each scenario uses two distinct voices for the two speakers
+VOICE_A = "Ock0AL5DBkvTUDePt4Hm"  # Male / authoritative
+VOICE_B = "oO7sLA3dWfQXsKeSAjpA"  # Female / older
+VOICE_C = "fVVjLtJgnQI61CoImgHU"  # Neutral / friendly
+
 SCRIPTS = {
     "bank_impersonation": {
         "label": "FAKE",
-        "voice_id": "Ock0AL5DBkvTUDePt4Hm",
         "prompt": """Write a realistic two-way phone scam conversation where someone impersonates a bank's fraud department calling an elderly person.
-Include both sides of the conversation: the scammer and the victim.
-The scammer should:
-1. Claim to be from the fraud department
-2. Create urgency about unauthorized activity
-3. Request account number and PIN
-4. Pressure the victim not to contact anyone else
+The scammer should claim to be from the fraud department, create urgency about unauthorized activity,
+request account number and PIN, and pressure the victim not to contact anyone else.
 The victim should sound confused and worried, gradually complying.
-Keep it under 45 seconds of speech. Format as a natural dialogue with no speaker labels.""",
+Keep it under 45 seconds of speech total.
+IMPORTANT: Format EXACTLY as alternating lines prefixed with A: or B: (A = scammer, B = victim).
+Example:
+A: Hello, this is the fraud department.
+B: Oh my, what's going on?""",
     },
     "grandparent_scam": {
         "label": "FAKE",
-        "voice_id": "oO7sLA3dWfQXsKeSAjpA",
         "prompt": """Write a realistic two-way grandparent scam phone conversation.
-Include both sides: the scammer pretending to be a grandchild, and the elderly grandparent.
-The scammer should:
-1. Pretend to be a grandchild in distress
-2. Claim to be in jail or had an accident
-3. Ask for money urgently via gift cards
-4. Beg the victim not to tell other family members
+The scammer pretends to be a grandchild in distress, claims to be in jail or had an accident,
+asks for money urgently via gift cards, and begs the victim not to tell other family members.
 The grandparent should sound concerned and loving, gradually agreeing to help.
-Keep it under 45 seconds. Format as natural dialogue with no speaker labels.""",
+Keep it under 45 seconds of speech total.
+IMPORTANT: Format EXACTLY as alternating lines prefixed with A: or B: (A = scammer, B = grandparent).
+Example:
+A: Grandma? It's me...
+B: Who is this?""",
     },
     "real_customer": {
         "label": "REAL",
-        "voice_id": "fVVjLtJgnQI61CoImgHU",
         "prompt": """Write a normal, legitimate two-way phone conversation.
-Include both sides: a caller and a receptionist.
-The caller should:
-1. Call about a scheduled appointment
-2. Confirm details politely
-3. Mention they might be a few minutes late
-The receptionist should be friendly and helpful.
-Keep it under 30 seconds. Format as natural dialogue with no speaker labels.""",
+A caller phones about a scheduled appointment, confirms details politely, mentions they might be late.
+The receptionist is friendly and helpful.
+Keep it under 30 seconds of speech total.
+IMPORTANT: Format EXACTLY as alternating lines prefixed with A: or B: (A = caller, B = receptionist).
+Example:
+A: Hi, I'm calling about my appointment.
+B: Of course, let me look that up.""",
     },
+}
+
+# Map scenario -> (voice for speaker A, voice for speaker B)
+SCENARIO_VOICES = {
+    "bank_impersonation": (VOICE_A, VOICE_B),  # scammer=male, victim=female
+    "grandparent_scam": (VOICE_A, VOICE_B),    # scammer=male, grandparent=female
+    "real_customer": (VOICE_C, VOICE_B),        # caller=neutral, receptionist=female
 }
 
 
@@ -86,7 +95,6 @@ def generate_scripts_with_gemini():
             )
             scripts[name] = {
                 "text": response.text,
-                "voice_id": config["voice_id"],
                 "label": config["label"],
             }
             print(f"  Done: {len(response.text)} chars")
@@ -103,49 +111,63 @@ def get_hardcoded_scripts():
     return {
         "bank_impersonation": {
             "text": (
-                "Hello, this is the fraud department at your bank. We've detected some unauthorized activity on your account. "
-                "Oh my goodness, what kind of activity? "
-                "It appears someone is attempting to transfer funds out of your savings. We need to verify your identity immediately to stop it. "
-                "Oh no, that's terrible. What do I need to do? "
-                "I'll need your account number and the last four digits of your PIN so we can secure your funds right away. "
-                "Okay, let me find my card. It's, um... "
-                "Please hurry, ma'am. The transfer is still in progress. And please don't hang up or contact anyone else. "
-                "This is time-sensitive and we need to keep this line open to protect your savings."
+                "A: Hello, this is the fraud department at your bank. We've detected some unauthorized activity on your account.\n"
+                "B: Oh my goodness, what kind of activity?\n"
+                "A: It appears someone is attempting to transfer funds out of your savings. We need to verify your identity immediately to stop it.\n"
+                "B: Oh no, that's terrible. What do I need to do?\n"
+                "A: I'll need your account number and the last four digits of your PIN so we can secure your funds right away.\n"
+                "B: Okay, let me find my card.\n"
+                "A: Please hurry, ma'am. The transfer is still in progress. And please don't hang up or contact anyone else. This is time-sensitive.\n"
             ),
-            "voice_id": "Ock0AL5DBkvTUDePt4Hm",
             "label": "FAKE",
         },
         "grandparent_scam": {
             "text": (
-                "Grandma? It's me... I'm in trouble. "
-                "Who is this? Tommy, is that you? You sound different. "
-                "Yeah, it's me. I, I hurt my nose in the accident. I'm at the police station, Grandma. "
-                "Oh my Lord, are you okay? What happened? "
-                "I got into a car accident and they're saying I need bail money right away. "
-                "Can you go to the store and get some gift cards? I need about two thousand dollars. "
-                "Of course, sweetheart. Let me get my purse. "
-                "And Grandma, please, please don't tell Mom and Dad. They'll be so upset with me. I'm so scared."
+                "A: Grandma? It's me... I'm in trouble.\n"
+                "B: Who is this? Tommy, is that you? You sound different.\n"
+                "A: Yeah, it's me. I hurt my nose in the accident. I'm at the police station, Grandma.\n"
+                "B: Oh my Lord, are you okay? What happened?\n"
+                "A: I got into a car accident and they're saying I need bail money right away. Can you go to the store and get some gift cards? I need about two thousand dollars.\n"
+                "B: Of course, sweetheart. Let me get my purse.\n"
+                "A: And Grandma, please, please don't tell Mom and Dad. They'll be so upset with me. I'm so scared.\n"
             ),
-            "voice_id": "oO7sLA3dWfQXsKeSAjpA",
             "label": "FAKE",
         },
         "real_customer": {
             "text": (
-                "Hi, I'm calling about the appointment we scheduled for next Tuesday at 2pm. "
-                "Of course! Let me pull that up. Yes, I see it right here. Tuesday the 25th at 2 o'clock. "
-                "Perfect. I just wanted to confirm and let you know I might be a few minutes late. Traffic has been terrible this week. "
-                "That's no problem at all. We'll have everything ready for you whenever you arrive. "
-                "Great, thank you so much. I really appreciate it. I'll see you then! "
-                "Sounds good. Have a wonderful day!"
+                "A: Hi, I'm calling about the appointment we scheduled for next Tuesday at 2pm.\n"
+                "B: Of course! Let me pull that up. Yes, I see it right here. Tuesday the 25th at 2 o'clock.\n"
+                "A: Perfect. I just wanted to confirm and let you know I might be a few minutes late. Traffic has been terrible this week.\n"
+                "B: That's no problem at all. We'll have everything ready for you whenever you arrive.\n"
+                "A: Great, thank you so much. I'll see you then!\n"
+                "B: Sounds good. Have a wonderful day!\n"
             ),
-            "voice_id": "fVVjLtJgnQI61CoImgHU",
             "label": "REAL",
         },
     }
 
 
+def _parse_dialogue(text: str) -> list:
+    """Parse A:/B: formatted dialogue into list of (speaker, line) tuples."""
+    lines = []
+    for raw_line in text.strip().split("\n"):
+        raw_line = raw_line.strip()
+        if raw_line.startswith("A:"):
+            lines.append(("A", raw_line[2:].strip()))
+        elif raw_line.startswith("B:"):
+            lines.append(("B", raw_line[2:].strip()))
+        elif raw_line:
+            # No prefix — append to previous speaker or default to A
+            if lines:
+                prev_speaker, prev_text = lines[-1]
+                lines[-1] = (prev_speaker, prev_text + " " + raw_line)
+            else:
+                lines.append(("A", raw_line))
+    return lines
+
+
 def synthesize_with_elevenlabs(scripts: dict):
-    """Synthesize scripts to MP3 using ElevenLabs API."""
+    """Synthesize scripts to MP3 using ElevenLabs API with two voices per scenario."""
     api_key = os.environ.get("ELEVENLABS_API_KEY")
     if not api_key:
         print("No ELEVENLABS_API_KEY — skipping audio synthesis.")
@@ -164,18 +186,38 @@ def synthesize_with_elevenlabs(scripts: dict):
         output_path = DEMO_DIR / f"{name}.mp3"
         print(f"Synthesizing: {name} -> {output_path}")
 
-        try:
-            audio = client.text_to_speech.convert(
-                text=script["text"],
-                voice_id=script["voice_id"],
-                model_id="eleven_multilingual_v2",
-            )
-            with open(output_path, "wb") as f:
-                for chunk in audio:
-                    f.write(chunk)
-            print(f"  Saved: {output_path}")
-        except Exception as e:
-            print(f"  Failed: {e}")
+        voice_a, voice_b = SCENARIO_VOICES.get(name, (VOICE_A, VOICE_B))
+        dialogue = _parse_dialogue(script["text"])
+
+        if not dialogue:
+            print(f"  No dialogue parsed for {name}, skipping")
+            continue
+
+        # Synthesize each line with the correct voice, collect raw MP3 bytes
+        mp3_parts = []
+        for speaker, line in dialogue:
+            voice_id = voice_a if speaker == "A" else voice_b
+            try:
+                audio = client.text_to_speech.convert(
+                    text=line,
+                    voice_id=voice_id,
+                    model_id="eleven_multilingual_v2",
+                )
+                part = b"".join(audio)
+                mp3_parts.append(part)
+                print(f"  [{speaker}] {line[:50]}... ({len(part)} bytes)")
+            except Exception as e:
+                print(f"  Failed line [{speaker}]: {e}")
+
+        if not mp3_parts:
+            print(f"  No audio generated for {name}")
+            continue
+
+        # Merge by concatenating MP3 frames (MP3 is frame-based, concat works)
+        with open(output_path, "wb") as f:
+            for part in mp3_parts:
+                f.write(part)
+        print(f"  Saved: {output_path} ({len(mp3_parts)} segments)")
 
 
 def generate_warning_phrases():

@@ -13,103 +13,123 @@ export function useDashboard(wsUrl = 'ws://localhost:8000/ws/dashboard', { onAud
   const [demoRunning, setDemoRunning] = useState(false)
   const wsRef = useRef(null)
   const pingRef = useRef(null)
+  const mountedRef = useRef(false)
+  const callbacksRef = useRef({ onAudioUrl, onBeforeDemo })
 
-  const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return
+  // Keep callbacks ref current without triggering reconnects
+  useEffect(() => {
+    callbacksRef.current = { onAudioUrl, onBeforeDemo }
+  }, [onAudioUrl, onBeforeDemo])
 
-    const ws = new WebSocket(wsUrl)
-    wsRef.current = ws
+  useEffect(() => {
+    mountedRef.current = true
+    let reconnectTimer = null
 
-    ws.onopen = () => {
-      setConnected(true)
-      // Keep-alive ping
-      pingRef.current = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'ping' }))
-        }
-      }, 30000)
-    }
+    function connect() {
+      // Don't connect if unmounted or already open
+      if (!mountedRef.current) return
+      if (wsRef.current?.readyState === WebSocket.OPEN ||
+          wsRef.current?.readyState === WebSocket.CONNECTING) return
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        if (data.type === 'pong') return
+      const ws = new WebSocket(wsUrl)
+      wsRef.current = ws
 
-        setLatestUpdate(data)
+      ws.onopen = () => {
+        if (!mountedRef.current) { ws.close(); return }
+        setConnected(true)
+        pingRef.current = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }))
+          }
+        }, 30000)
+      }
 
-        // Notify about demo audio URL (first chunk of a demo)
-        if (data.audio_url && onAudioUrl) {
-          onAudioUrl(data.audio_url)
-        }
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.type === 'pong') return
 
-        // Append to score history
-        setScoreHistory((prev) => {
-          const next = [...prev, {
-            time: new Date(data.timestamp * 1000).toLocaleTimeString(),
-            deepfake: data.deepfake_score,
-            composite: data.composite?.score ?? 0,
-            escalation: (data.gemini?.escalation_score ?? 0) / 100,
-          }]
-          // Keep last 60 data points
-          return next.slice(-60)
-        })
+          setLatestUpdate(data)
 
-        // Append transcript
-        if (data.transcript && data.transcript !== '...') {
-          setTranscriptLines((prev) => {
+          if (data.audio_url && callbacksRef.current.onAudioUrl) {
+            callbacksRef.current.onAudioUrl(data.audio_url)
+          }
+
+          setScoreHistory((prev) => {
             const next = [...prev, {
-              text: data.transcript,
-              timestamp: data.timestamp,
-              level: data.composite?.level ?? 'low',
-              flags: [
-                ...(data.gemini?.phrase_flags ?? []),
-                ...(data.scam_intent?.flags ?? []),
-              ],
+              time: new Date(data.timestamp * 1000).toLocaleTimeString(),
+              deepfake: data.deepfake_score,
+              composite: data.composite?.score ?? 0,
+              escalation: (data.gemini?.escalation_score ?? 0) / 100,
             }]
-            return next.slice(-50)
+            return next.slice(-60)
           })
-        }
 
-        // Collect all flags
-        const newFlags = [
-          ...(data.gemini?.tone_flags ?? []),
-          ...(data.gemini?.phrase_flags ?? []),
-          ...(data.scam_intent?.flags ?? []),
-          ...(data.behavioral?.flags ?? []),
-        ]
-        if (newFlags.length > 0) {
-          setAllFlags((prev) => {
-            const combined = [...prev, ...newFlags.map((f) => ({
-              text: f,
-              timestamp: data.timestamp,
-            }))]
-            return combined.slice(-30)
-          })
-        }
+          if (data.transcript && data.transcript !== '...') {
+            setTranscriptLines((prev) => {
+              const next = [...prev, {
+                text: data.transcript,
+                timestamp: data.timestamp,
+                level: data.composite?.level ?? 'low',
+                flags: [
+                  ...(data.gemini?.phrase_flags ?? []),
+                  ...(data.scam_intent?.flags ?? []),
+                ],
+              }]
+              return next.slice(-50)
+            })
+          }
 
-        setCompositeLevel(data.composite?.level ?? 'low')
-      } catch (e) {
-        // ignore parse errors
+          const newFlags = [
+            ...(data.gemini?.tone_flags ?? []),
+            ...(data.gemini?.phrase_flags ?? []),
+            ...(data.scam_intent?.flags ?? []),
+            ...(data.behavioral?.flags ?? []),
+          ]
+          if (newFlags.length > 0) {
+            setAllFlags((prev) => {
+              const combined = [...prev, ...newFlags.map((f) => ({
+                text: f,
+                timestamp: data.timestamp,
+              }))]
+              return combined.slice(-30)
+            })
+          }
+
+          setCompositeLevel(data.composite?.level ?? 'low')
+        } catch (e) {
+          // ignore parse errors
+        }
+      }
+
+      ws.onclose = () => {
+        setConnected(false)
+        clearInterval(pingRef.current)
+        // Only reconnect if still mounted
+        if (mountedRef.current) {
+          reconnectTimer = setTimeout(connect, 2000)
+        }
+      }
+
+      ws.onerror = () => {
+        ws.close()
       }
     }
 
-    ws.onclose = () => {
-      setConnected(false)
-      clearInterval(pingRef.current)
-      // Auto-reconnect after 2s
-      setTimeout(connect, 2000)
-    }
+    connect()
 
-    ws.onerror = () => {
-      ws.close()
+    return () => {
+      mountedRef.current = false
+      clearTimeout(reconnectTimer)
+      clearInterval(pingRef.current)
+      if (wsRef.current) {
+        wsRef.current.onclose = null // prevent reconnect on cleanup close
+        wsRef.current.close()
+        wsRef.current = null
+      }
+      setConnected(false)
     }
   }, [wsUrl])
-
-  const disconnect = useCallback(() => {
-    clearInterval(pingRef.current)
-    wsRef.current?.close()
-    setConnected(false)
-  }, [])
 
   const reset = useCallback(() => {
     setLatestUpdate(null)
@@ -121,8 +141,7 @@ export function useDashboard(wsUrl = 'ws://localhost:8000/ws/dashboard', { onAud
 
   const runDemo = useCallback(async (scenario) => {
     reset()
-    // Prepare audio element synchronously inside user gesture (before any await)
-    if (onBeforeDemo) onBeforeDemo()
+    if (callbacksRef.current.onBeforeDemo) callbacksRef.current.onBeforeDemo()
     setDemoRunning(true)
     try {
       const res = await fetch(`/demo/${scenario}`, { method: 'POST' })
@@ -132,12 +151,6 @@ export function useDashboard(wsUrl = 'ws://localhost:8000/ws/dashboard', { onAud
       setDemoRunning(false)
     }
   }, [reset])
-
-  // Auto-connect on mount
-  useEffect(() => {
-    connect()
-    return () => disconnect()
-  }, [connect, disconnect])
 
   return {
     connected,
