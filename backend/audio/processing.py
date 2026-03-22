@@ -11,7 +11,7 @@ import numpy as np
 logger = logging.getLogger("moneyspeaks.audio")
 
 TARGET_SAMPLE_RATE = 16000
-CHUNK_DURATION_S = 2
+CHUNK_DURATION_S = 5
 CHUNK_SAMPLES = TARGET_SAMPLE_RATE * CHUNK_DURATION_S
 
 

@@ -322,9 +322,9 @@ async def run_demo(scenario: str):
         # Broadcast to dashboard clients
         await manager.broadcast(result)
 
-        # Pace chunks to avoid Gemini rate limits (2s per chunk)
+        # Pace chunks to match audio playback (5s per chunk)
         if i < len(chunks) - 1:
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(5.0)
 
     manager.active_scenario = None
     return {
