@@ -3,7 +3,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 /**
  * Manages WebSocket connection to /ws/dashboard and state for all score data.
  */
-export function useDashboard(wsUrl = 'ws://localhost:8000/ws/dashboard', { onAudioUrl } = {}) {
+export function useDashboard(wsUrl = 'ws://localhost:8000/ws/dashboard', { onAudioUrl, onBeforeDemo } = {}) {
   const [connected, setConnected] = useState(false)
   const [latestUpdate, setLatestUpdate] = useState(null)
   const [scoreHistory, setScoreHistory] = useState([])
@@ -121,6 +121,8 @@ export function useDashboard(wsUrl = 'ws://localhost:8000/ws/dashboard', { onAud
 
   const runDemo = useCallback(async (scenario) => {
     reset()
+    // Prepare audio element synchronously inside user gesture (before any await)
+    if (onBeforeDemo) onBeforeDemo()
     setDemoRunning(true)
     try {
       const res = await fetch(`/demo/${scenario}`, { method: 'POST' })

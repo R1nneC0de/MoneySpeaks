@@ -49,23 +49,39 @@ function speakWarning(level, lastSpokenRef) {
   })
 }
 
-// Play demo scenario audio in the browser
+// Play demo scenario audio in the browser.
+// We pre-create the Audio element on the user's click (trusted gesture) and set
+// src later when the backend sends the audio_url. This avoids browser autoplay blocks.
 let currentDemoAudio = null
+let pendingDemoAudio = null
+
+function prepareDemoAudio() {
+  stopDemoAudio()
+  // Create and "warm up" an Audio element inside the user gesture
+  pendingDemoAudio = new Audio()
+  pendingDemoAudio.preload = 'auto'
+}
+
 function playDemoAudio(url) {
-  if (currentDemoAudio) {
-    currentDemoAudio.pause()
-    currentDemoAudio = null
-  }
-  if (url) {
+  if (!url) return
+  if (pendingDemoAudio) {
+    currentDemoAudio = pendingDemoAudio
+    pendingDemoAudio = null
+    currentDemoAudio.src = url
+    currentDemoAudio.play().catch((e) => console.warn('Demo audio playback failed:', e))
+  } else {
+    // Fallback: try direct play (may be blocked by browser)
     currentDemoAudio = new Audio(url)
     currentDemoAudio.play().catch((e) => console.warn('Demo audio playback failed:', e))
   }
 }
+
 function stopDemoAudio() {
   if (currentDemoAudio) {
     currentDemoAudio.pause()
     currentDemoAudio = null
   }
+  pendingDemoAudio = null
 }
 
 export default function App() {
@@ -82,6 +98,7 @@ export default function App() {
     reset,
   } = useDashboard('ws://localhost:8000/ws/dashboard', {
     onAudioUrl: (url) => playDemoAudio(url),
+    onBeforeDemo: () => prepareDemoAudio(),
   })
   const {
     isAuthenticated, isLoading, user, profile, mockMode,

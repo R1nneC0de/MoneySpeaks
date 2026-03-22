@@ -202,19 +202,24 @@ class GeminiLiveSession:
         }
 
     async def _real_analyze(self, audio_chunk: np.ndarray, scenario_hint: str = "") -> dict:
+        from google.genai import types
+
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                # Convert float32 audio to base64-encoded PCM16
+                # Convert float32 audio to raw PCM16 bytes
                 pcm16 = (np.clip(audio_chunk, -1.0, 1.0) * 32767).astype(np.int16)
-                audio_b64 = base64.b64encode(pcm16.tobytes()).decode("utf-8")
+                audio_part = types.Part.from_bytes(
+                    data=pcm16.tobytes(),
+                    mime_type="audio/L16;rate=16000",
+                )
 
                 response = await asyncio.to_thread(
                     self.client.models.generate_content,
                     model=GEMINI_MODEL,
                     contents=[
                         SYSTEM_PROMPT,
-                        {"mime_type": "audio/pcm", "data": audio_b64},
+                        audio_part,
                         "Analyze this audio segment. Respond with JSON only.",
                     ],
                 )
@@ -233,7 +238,10 @@ class GeminiLiveSession:
 
             except Exception as e:
                 error_str = str(e).lower()
-                is_rate_limit = "429" in str(e) or "rate" in error_str or "quota" in error_str or "resource" in error_str
+                is_validation = "validation" in error_str or "pydantic" in error_str
+                is_rate_limit = not is_validation and (
+                    "429" in str(e) or "rate" in error_str or "quota" in error_str or "resource" in error_str
+                )
                 if is_rate_limit and attempt < max_retries - 1:
                     wait = (attempt + 1) * 5  # 5s, 10s backoff
                     logger.warning(f"Gemini rate limited, retrying in {wait}s (attempt {attempt + 1})")
