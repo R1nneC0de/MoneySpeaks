@@ -86,9 +86,7 @@ class GeminiLiveSession:
         """
         self._chunk_count += 1
 
-        # Use mock for demo scenarios to conserve Gemini API quota (free tier = 20 req/day).
-        # Real Gemini is only used for live mic input (no scenario hint).
-        if self.mock_mode or scenario_hint:
+        if self.mock_mode:
             return self._mock_analyze(scenario_hint)
         return await self._real_analyze(audio_chunk, scenario_hint)
 
