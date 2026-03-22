@@ -125,11 +125,19 @@ class ScamIntentClassifier:
     async def _real_classify(self) -> dict:
         prompt = CLASSIFICATION_PROMPT.format(transcript=self._transcript_buffer[-2000:])
 
-        try:
-            return await self._classify_with_gemini(prompt)
-        except Exception as e:
-            logger.error(f"Classification failed: {e}")
-            return self._mock_classify()
+        for attempt in range(3):
+            try:
+                return await self._classify_with_gemini(prompt)
+            except Exception as e:
+                error_str = str(e).lower()
+                is_rate_limit = "429" in str(e) or "rate" in error_str or "quota" in error_str
+                if is_rate_limit and attempt < 2:
+                    wait = (attempt + 1) * 5
+                    logger.warning(f"Scam classifier rate limited, retrying in {wait}s")
+                    await asyncio.sleep(wait)
+                    continue
+                logger.error(f"Classification failed: {e}")
+                return self._mock_classify()
 
     async def _classify_with_gemini(self, prompt: str) -> dict:
         import google.generativeai as genai

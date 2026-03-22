@@ -202,44 +202,49 @@ class GeminiLiveSession:
         }
 
     async def _real_analyze(self, audio_chunk: np.ndarray) -> dict:
-        try:
-            import google.generativeai as genai
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                import google.generativeai as genai
 
-            # Convert float32 audio to base64-encoded PCM16
-            pcm16 = (np.clip(audio_chunk, -1.0, 1.0) * 32767).astype(np.int16)
-            audio_b64 = base64.b64encode(pcm16.tobytes()).decode("utf-8")
+                # Convert float32 audio to base64-encoded PCM16
+                pcm16 = (np.clip(audio_chunk, -1.0, 1.0) * 32767).astype(np.int16)
+                audio_b64 = base64.b64encode(pcm16.tobytes()).decode("utf-8")
 
-            response = await asyncio.to_thread(
-                self.client.generate_content,
-                [
-                    SYSTEM_PROMPT,
-                    {"mime_type": "audio/pcm", "data": audio_b64},
-                    "Analyze this audio segment. Respond with JSON only.",
-                ],
-            )
+                response = await asyncio.to_thread(
+                    self.client.generate_content,
+                    [
+                        SYSTEM_PROMPT,
+                        {"mime_type": "audio/pcm", "data": audio_b64},
+                        "Analyze this audio segment. Respond with JSON only.",
+                    ],
+                )
 
-            text = response.text.strip()
-            # Try to extract JSON from response
-            if text.startswith("```"):
-                text = text.split("```")[1]
-                if text.startswith("json"):
-                    text = text[4:]
-                text = text.strip()
+                text = response.text.strip()
+                # Try to extract JSON from response
+                if text.startswith("```"):
+                    text = text.split("```")[1]
+                    if text.startswith("json"):
+                        text = text[4:]
+                    text = text.strip()
 
-            result = json.loads(text)
-            result["mock"] = False
-            return result
+                result = json.loads(text)
+                result["mock"] = False
+                return result
 
-        except Exception as e:
-            logger.error(f"Gemini analysis failed: {e}")
-            return {
-                "transcript": "",
-                "tone_flags": [],
-                "phrase_flags": [],
-                "escalation_score": 0,
-                "reasoning": f"Analysis error: {str(e)[:100]}",
-                "mock": True,
-            }
+            except Exception as e:
+                error_str = str(e).lower()
+                is_rate_limit = "429" in str(e) or "rate" in error_str or "quota" in error_str or "resource" in error_str
+                if is_rate_limit and attempt < max_retries - 1:
+                    wait = (attempt + 1) * 5  # 5s, 10s backoff
+                    logger.warning(f"Gemini rate limited, retrying in {wait}s (attempt {attempt + 1})")
+                    await asyncio.sleep(wait)
+                    continue
+                logger.error(f"Gemini analysis failed: {e}")
+                # Fall back to mock for this chunk
+                return self._mock_analyze(
+                    "bank" if self._chunk_count > 0 else ""
+                )
 
     def reset(self):
         """Reset session state for a new call."""

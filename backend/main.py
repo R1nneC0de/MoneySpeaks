@@ -308,26 +308,30 @@ async def run_demo(scenario: str):
     chunks = chunk_audio(audio)
     results = []
 
-    # Process each chunk with a small delay to simulate real-time
+    # Process each chunk with delay to stay within Gemini rate limits
     for i, chunk in enumerate(chunks):
         result = await process_audio_chunk(chunk, config["hint"])
         result["demo_scenario"] = scenario
         result["chunk_index"] = i
         result["total_chunks"] = len(chunks)
+        # Tell frontend which audio file to play on first chunk
+        if i == 0:
+            result["audio_url"] = f"/demo-audio/{config['file']}"
         results.append(result)
 
         # Broadcast to dashboard clients
         await manager.broadcast(result)
 
-        # Simulate real-time pacing (0.5s between chunks for demo speed)
+        # Pace chunks to avoid Gemini rate limits (2s per chunk)
         if i < len(chunks) - 1:
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(2.0)
 
     manager.active_scenario = None
     return {
         "scenario": scenario,
         "chunks_processed": len(chunks),
         "final_composite": results[-1]["composite"] if results else None,
+        "audio_url": f"/demo-audio/{config['file']}",
         "results": results,
     }
 
@@ -341,6 +345,9 @@ async def reset_demo():
     manager.active_scenario = None
     return {"status": "reset"}
 
+
+# --- Serve demo audio files for browser playback ---
+app.mount("/demo-audio", StaticFiles(directory=str(DEMO_DIR)), name="demo-audio")
 
 # --- Serve pre-cached TTS warnings ---
 warnings_dir = DEMO_DIR / "warnings"
