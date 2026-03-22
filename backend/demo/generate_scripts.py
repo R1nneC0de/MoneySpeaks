@@ -17,7 +17,7 @@ DEMO_DIR = Path(__file__).parent
 SCRIPTS = {
     "bank_impersonation": {
         "label": "FAKE",
-        "voice_id": "voice_9",  # ElevenLabs voice 9 (never seen by model)
+        "voice_id": "Ock0AL5DBkvTUDePt4Hm",
         "prompt": """Write a realistic phone scam script where someone impersonates a bank's fraud department.
 The caller should:
 1. Claim to be from the fraud department
@@ -28,7 +28,7 @@ Keep it under 45 seconds of speech. Write only the scammer's dialogue, one line 
     },
     "grandparent_scam": {
         "label": "FAKE",
-        "voice_id": "voice_11",  # ElevenLabs voice 11
+        "voice_id": "oO7sLA3dWfQXsKeSAjpA",
         "prompt": """Write a realistic grandparent scam phone script.
 The caller should:
 1. Pretend to be a grandchild in distress
@@ -39,7 +39,7 @@ Keep it under 45 seconds. Write only the scammer's dialogue.""",
     },
     "real_customer": {
         "label": "REAL",
-        "voice_id": "voice_12",  # ElevenLabs voice 12
+        "voice_id": "fVVjLtJgnQI61CoImgHU",
         "prompt": """Write a normal, legitimate phone conversation script.
 The caller should:
 1. Call about a scheduled appointment
@@ -92,7 +92,7 @@ def get_hardcoded_scripts():
                 "Please don't hang up or contact anyone else — this is time-sensitive and your savings are at risk. "
                 "If you don't act now, we won't be able to prevent the unauthorized transfer."
             ),
-            "voice_id": "voice_9",
+            "voice_id": "Ock0AL5DBkvTUDePt4Hm",
             "label": "FAKE",
         },
         "grandparent_scam": {
@@ -103,7 +103,7 @@ def get_hardcoded_scripts():
                 "I need bail money right away — can you go to the store and get some gift cards? "
                 "I need about two thousand dollars. Please hurry, I'm scared."
             ),
-            "voice_id": "voice_11",
+            "voice_id": "oO7sLA3dWfQXsKeSAjpA",
             "label": "FAKE",
         },
         "real_customer": {
@@ -113,7 +113,7 @@ def get_hardcoded_scripts():
                 "Traffic has been terrible this week. "
                 "Great, thank you so much. I'll see you then. Have a wonderful day!"
             ),
-            "voice_id": "voice_12",
+            "voice_id": "fVVjLtJgnQI61CoImgHU",
             "label": "REAL",
         },
     }
@@ -182,7 +182,7 @@ def generate_warning_phrases():
         try:
             audio = client.text_to_speech.convert(
                 text=text,
-                voice_id="21m00Tcm4TlvDq8ikWAM",  # Rachel — clear, calm voice
+                voice_id="fVVjLtJgnQI61CoImgHU",
                 model_id="eleven_multilingual_v2",
             )
             with open(output_path, "wb") as f:

@@ -38,12 +38,17 @@ SENTENCES = [
     "Hi, just calling to let you know dinner will be ready at six tonight.",
 ]
 
-# ElevenLabs voice IDs — replace with actual voice IDs from your account
+# ElevenLabs voice IDs
+# Training uses all 3 voices; test holds them out in different combinations
 TRAINING_VOICES = {
-    f"voice_{i}": f"placeholder_voice_id_{i}" for i in range(1, 9)
+    "voice_1": "Ock0AL5DBkvTUDePt4Hm",
+    "voice_2": "oO7sLA3dWfQXsKeSAjpA",
+    "voice_3": "fVVjLtJgnQI61CoImgHU",
 }
 TEST_VOICES = {
-    f"voice_{i}": f"placeholder_voice_id_{i}" for i in range(9, 13)
+    "voice_test_1": "Ock0AL5DBkvTUDePt4Hm",
+    "voice_test_2": "oO7sLA3dWfQXsKeSAjpA",
+    "voice_test_3": "fVVjLtJgnQI61CoImgHU",
 }
 
 
