@@ -1,66 +1,54 @@
 import React from 'react'
 
-const FLAG_COLORS = {
-  urgency: 'bg-red-500/20 text-red-300 border-red-500/30',
-  fear_induction: 'bg-red-500/20 text-red-300 border-red-500/30',
-  false_authority: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
-  sympathy_exploitation: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
-  isolation_tactics: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
-  anger_pressure: 'bg-red-500/20 text-red-300 border-red-500/30',
-}
-
-const DEFAULT_COLOR = 'bg-slate-500/20 text-slate-300 border-slate-500/30'
-
 /**
- * Displays flagged phrases and tone indicators as pill badges.
+ * Flagged indicators as terminal-style tags — retro CRT.
  */
 export default function FlaggedPhrases({ flags = [] }) {
-  if (flags.length === 0) {
-    return (
-      <div className="bg-surface-800 rounded-2xl p-6">
-        <h3 className="text-lg font-semibold mb-4">Flagged Indicators</h3>
-        <p className="text-gray-500 text-sm">No suspicious indicators detected yet.</p>
-      </div>
-    )
-  }
-
   // Deduplicate flags by text
   const unique = []
   const seen = new Set()
   for (const flag of flags) {
-    const key = flag.text.toLowerCase()
+    const key = (typeof flag === 'string' ? flag : flag.text).toLowerCase()
     if (!seen.has(key)) {
       seen.add(key)
-      unique.push(flag)
+      unique.push(typeof flag === 'string' ? { text: flag } : flag)
     }
   }
 
   return (
-    <div className="bg-surface-800 rounded-2xl p-6">
-      <h3 className="text-lg font-semibold mb-4">
-        Flagged Indicators
-        <span className="ml-2 text-sm font-normal text-gray-400">
-          ({unique.length})
-        </span>
-      </h3>
-      <div className="flex flex-wrap gap-2">
-        {unique.map((flag, i) => {
-          const colorKey = flag.text.toLowerCase().replace(/\s+/g, '_')
-          const colorClass = FLAG_COLORS[colorKey] || DEFAULT_COLOR
+    <div className="window-panel">
+      <div className="window-titlebar window-titlebar-amber">
+        <span>[ THREAT FLAGS ] ({unique.length})</span>
+        <span>■</span>
+      </div>
+      <div className="p-4 bg-crt-black">
+        {unique.length === 0 ? (
+          <p className="font-mono text-sm text-crt-green-dim">
+            &gt; No suspicious indicators detected.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {unique.map((flag, i) => {
+              const text = flag.text
+              const isUrgent = /urgency|fear|danger|arrest|immediate/i.test(text)
+              const color = isUrgent
+                ? 'text-crt-red border-crt-red/40 bg-crt-red/10'
+                : 'text-crt-amber border-crt-amber/40 bg-crt-amber/10'
 
-          return (
-            <span
-              key={`${flag.text}-${i}`}
-              className={`
-                px-3 py-1.5 rounded-full text-sm font-medium
-                border ${colorClass}
-                transition-all duration-300
-              `}
-            >
-              {flag.text}
-            </span>
-          )
-        })}
+              return (
+                <span
+                  key={`${text}-${i}`}
+                  className={`
+                    font-mono text-sm px-2 py-1
+                    border ${color}
+                  `}
+                >
+                  [!] {text}
+                </span>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )

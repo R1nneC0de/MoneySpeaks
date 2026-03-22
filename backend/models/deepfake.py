@@ -68,6 +68,8 @@ class DeepfakeDetector:
 
         if "bank" in hint or "impersonation" in hint:
             fake_score = 0.85 + noise
+        elif "credit" in hint:
+            fake_score = 0.78 + noise
         elif "grandparent" in hint or "scam" in hint:
             fake_score = 0.72 + noise
         elif "real" in hint or "customer" in hint or "legitimate" in hint:

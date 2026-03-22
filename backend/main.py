@@ -22,6 +22,7 @@ from backend.audio.processing import (
     validate_audio,
     TARGET_SAMPLE_RATE,
 )
+from backend.audio.transcribe import ElevenLabsTranscriber
 from backend.models.deepfake import DeepfakeDetector
 from backend.models.gemini_live import GeminiLiveSession
 from backend.models.composite import composite_risk
@@ -47,6 +48,7 @@ deepfake_detector = DeepfakeDetector()
 gemini_session = GeminiLiveSession()
 scam_classifier = ScamIntentClassifier()
 behavioral_analyzer = BehavioralAnalyzer()
+transcriber = ElevenLabsTranscriber()
 
 # --- WebSocket connection manager ---
 class ConnectionManager:
@@ -264,15 +266,20 @@ DEMO_SCENARIOS = {
     "bank_impersonation": {"file": "bank_impersonation.mp3", "hint": "bank_impersonation"},
     "investment_scam": {"file": "investment_scam.mp3", "hint": "investment_scam"},
     "legitimate_bank_call": {"file": "legitimate_bank_call.mp3", "hint": "legitimate_bank_call"},
+    "credit_card_scam": {"file": "credit_card_scam.mp3", "hint": "credit_card_scam"},
 }
 
 
 @app.post("/demo/{scenario}")
 async def run_demo(scenario: str):
-    """Run a demo scenario through the live pipeline.
+    """Run a demo scenario with optimized pipeline.
 
-    Reads the MP3 file, chunks it, and processes through the same pipeline
-    as live audio — no pre-computed scores.
+    New flow (minimizes API calls):
+    1. ElevenLabs STT — transcribe full audio upfront (1 API call)
+    2. Gemini — single analysis on full transcript (1 API call)
+    3. Deepfake + Behavioral — per-chunk on audio (local, no API calls)
+
+    Broadcasts: demo_start → chunk_updates → demo_end
     """
     if scenario not in DEMO_SCENARIOS:
         return JSONResponse(
@@ -291,48 +298,116 @@ async def run_demo(scenario: str):
 
     await gemini_session.start_session()
 
-    # Check if MP3 file exists — if not, use mock mode with synthetic chunks
+    # Load audio
     if mp3_path.exists():
         with open(mp3_path, "rb") as f:
             raw = f.read()
         audio = decode_audio_bytes(raw, source_format="mp3")
     else:
         logger.warning(f"Demo file {mp3_path} not found — generating synthetic chunks")
-        # Generate 10 seconds of silence (5 chunks) for mock pipeline
         import numpy as np
         audio = np.zeros(TARGET_SAMPLE_RATE * 10, dtype=np.float32)
+        raw = b""  # No bytes for STT
 
     stats = validate_audio(audio)
     logger.info(f"Demo '{scenario}': {stats}")
 
+    # --- Step 1: ElevenLabs STT (full file, 1 API call) ---
+    if raw:
+        transcript_data = await transcriber.transcribe(raw, num_speakers=2)
+    else:
+        transcript_data = transcriber._mock_transcribe()
+    logger.info(f"STT complete: {len(transcript_data['words'])} words, mock={transcript_data['mock']}")
+
+    # --- Step 2: Gemini analysis on full transcript (1 API call) ---
+    analysis = await gemini_session.analyze_transcript(
+        transcript_data["text"], config["hint"]
+    )
+    logger.info(f"Gemini analysis complete: escalation={analysis.get('escalation_score')}, mock={analysis.get('mock')}")
+
+    # --- Step 3: Broadcast demo_start (transcript + audio only, NO analysis yet) ---
     chunks = chunk_audio(audio)
-    results = []
 
-    # Process each chunk with delay to stay within Gemini rate limits
+    demo_start_msg = {
+        "type": "demo_start",
+        "scenario": scenario,
+        "audio_url": f"/demo-audio/{config['file']}",
+        "transcript": {
+            "text": transcript_data["text"],
+            "words": transcript_data["words"],
+        },
+        "total_chunks": len(chunks),
+    }
+    await manager.broadcast(demo_start_msg)
+
+    # --- Step 4: Progressive analysis reveal across chunks ---
+    # Pre-compute flag lists for progressive distribution
+    all_tone_flags = analysis.get("tone_flags", [])
+    all_phrase_flags = analysis.get("phrase_flags", [])
+    all_scam_flags = analysis.get("scam_flags", [])
+    final_escalation = analysis.get("escalation_score", 0)
+    final_scam_risk = analysis.get("scam_risk", 0)
+    final_scam_type = analysis.get("scam_type", "none")
+    final_reasoning = analysis.get("reasoning", "")
+
+    chunk_results = []
     for i, chunk in enumerate(chunks):
-        result = await process_audio_chunk(chunk, config["hint"])
-        result["demo_scenario"] = scenario
-        result["chunk_index"] = i
-        result["total_chunks"] = len(chunks)
-        # Tell frontend which audio file to play on first chunk
-        if i == 0:
-            result["audio_url"] = f"/demo-audio/{config['file']}"
-        results.append(result)
+        progress = (i + 1) / len(chunks)  # e.g. 0.2, 0.4, 0.6, 0.8, 1.0
 
-        # Broadcast to dashboard clients
-        await manager.broadcast(result)
+        # Flags start appearing after ~20% of audio, ramp to full at end
+        flag_progress = min(1.0, max(0.0, (progress - 0.15) / 0.85))
 
-        # Pace chunks to match audio playback (5s per chunk)
+        n_tone = int(len(all_tone_flags) * flag_progress)
+        n_phrase = int(len(all_phrase_flags) * flag_progress)
+        n_scam = int(len(all_scam_flags) * flag_progress)
+
+        progressive_analysis = {
+            "tone_flags": all_tone_flags[:n_tone],
+            "phrase_flags": all_phrase_flags[:n_phrase],
+            "escalation_score": int(final_escalation * progress),
+            "reasoning": final_reasoning if i == len(chunks) - 1 else "",
+            "scam_risk": int(final_scam_risk * progress),
+            "scam_type": final_scam_type if progress >= 0.5 else "none",
+            "scam_flags": all_scam_flags[:n_scam],
+        }
+
+        # Run deepfake + behavioral in parallel (both local)
+        deepfake_task = asyncio.to_thread(deepfake_detector.score, chunk, config["hint"])
+        behavioral_task = asyncio.to_thread(behavioral_analyzer.analyze_chunk, chunk, config["hint"])
+        deepfake_result, behavioral_result = await asyncio.gather(deepfake_task, behavioral_task)
+
+        # Composite risk uses progressive analysis (so it ramps up naturally)
+        comp = composite_risk(deepfake_result["fake"], progressive_analysis)
+
+        chunk_msg = {
+            "type": "chunk_update",
+            "chunk_index": i,
+            "total_chunks": len(chunks),
+            "timestamp": time.time(),
+            "deepfake_score": deepfake_result["fake"],
+            "deepfake": deepfake_result,
+            "behavioral": behavioral_result,
+            "analysis": progressive_analysis,
+            "composite": comp,
+        }
+        chunk_results.append(chunk_msg)
+        await manager.broadcast(chunk_msg)
+
+        # Pace chunks to roughly match audio playback
         if i < len(chunks) - 1:
             await asyncio.sleep(5.0)
+
+    # --- Step 5: Broadcast demo_end ---
+    await manager.broadcast({"type": "demo_end", "scenario": scenario})
 
     manager.active_scenario = None
     return {
         "scenario": scenario,
         "chunks_processed": len(chunks),
-        "final_composite": results[-1]["composite"] if results else None,
+        "final_composite": chunk_results[-1]["composite"] if chunk_results else None,
         "audio_url": f"/demo-audio/{config['file']}",
-        "results": results,
+        "transcript": transcript_data["text"],
+        "analysis": analysis,
     }
 
 

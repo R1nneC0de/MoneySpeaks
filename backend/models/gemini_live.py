@@ -49,6 +49,37 @@ Audio: Emotional caller claiming to be a grandchild in trouble
 
 CRITICAL: Always respond with valid JSON only. No other text."""
 
+TRANSCRIPT_ANALYSIS_PROMPT = """You are MoneySpeaks, a phone call scam detection system.
+Analyze this complete phone call transcript for social engineering, emotional manipulation,
+scam indicators, and fraud patterns. This protects elderly users from voice fraud.
+
+Transcript:
+{transcript}
+
+You MUST respond with ONLY valid JSON — no markdown, no explanation.
+
+Required JSON format:
+{{"tone_flags": [...], "phrase_flags": [...], "escalation_score": 0, "reasoning": "...", "scam_risk": 0, "scam_type": "none", "scam_flags": [...]}}
+
+Field definitions:
+- tone_flags: Detected emotional manipulation tactics. Examples: "urgency", "fear_induction", "false_authority", "sympathy_exploitation", "anger_pressure", "isolation_tactics"
+- phrase_flags: Specific suspicious phrases found in the transcript. Quote the EXACT phrases from the transcript.
+- escalation_score: 0-100. 0=normal conversation, 100=definite scam. Based on the full conversation arc.
+- reasoning: 2-3 sentence explanation of your assessment
+- scam_risk: 0-100. Independent scam probability score.
+- scam_type: "none"|"irs_impersonation"|"bank_fraud"|"investment_scam"|"grandparent_scam"|"medicare_scam"|"tech_support"|"utility_scam"|"other"
+- scam_flags: Specific scam indicator phrases found. Examples: "requests PIN", "threatens arrest", "demands gift cards", "guaranteed returns"
+
+Examples:
+
+Normal bank inquiry:
+{{"tone_flags": [], "phrase_flags": [], "escalation_score": 5, "reasoning": "Routine customer service call with no manipulation indicators.", "scam_risk": 3, "scam_type": "none", "scam_flags": []}}
+
+Bank fraud impersonation:
+{{"tone_flags": ["urgency", "fear_induction", "false_authority"], "phrase_flags": ["fraud department", "unauthorized activity", "verify your account number", "don't hang up"], "escalation_score": 90, "reasoning": "Classic bank impersonation: claims fraud urgency, requests sensitive credentials, isolates victim from real bank.", "scam_risk": 92, "scam_type": "bank_fraud", "scam_flags": ["requests account number", "requests PIN", "impersonates bank", "isolation tactic"]}}
+
+CRITICAL: Always respond with valid JSON only. No other text."""
+
 
 class GeminiLiveSession:
     """Manages a persistent Gemini Live session for affective analysis."""
@@ -197,6 +228,114 @@ class GeminiLiveSession:
                 logger.error(f"Gemini analysis failed: {e}")
                 # Fall back to mock with correct scenario hint
                 return self._mock_analyze(scenario_hint)
+
+    async def analyze_transcript(self, transcript: str, scenario_hint: str = "") -> dict:
+        """Analyze a full transcript text with a single Gemini call.
+
+        Combines tone analysis + scam classification into one request.
+        Used by the demo pipeline to minimize API calls.
+
+        Returns:
+            {tone_flags, phrase_flags, escalation_score, reasoning,
+             scam_risk, scam_type, scam_flags, mock}
+        """
+        if self.mock_mode:
+            return self._mock_transcript_analysis(scenario_hint)
+
+        prompt = TRANSCRIPT_ANALYSIS_PROMPT.format(transcript=transcript)
+
+        for attempt in range(3):
+            try:
+                response = await asyncio.to_thread(
+                    self.client.models.generate_content,
+                    model=GEMINI_MODEL,
+                    contents=prompt,
+                )
+
+                text = response.text.strip()
+                if text.startswith("```"):
+                    text = text.split("```")[1]
+                    if text.startswith("json"):
+                        text = text[4:]
+                    text = text.strip()
+
+                result = json.loads(text)
+                result["mock"] = False
+                return result
+
+            except Exception as e:
+                error_str = str(e).lower()
+                is_validation = "validation" in error_str or "pydantic" in error_str
+                is_rate_limit = not is_validation and (
+                    "429" in str(e) or "rate" in error_str or "quota" in error_str or "resource" in error_str
+                )
+                if is_rate_limit and attempt < 2:
+                    wait = (attempt + 1) * 5
+                    logger.warning(f"Gemini rate limited on transcript analysis, retrying in {wait}s (attempt {attempt + 1})")
+                    await asyncio.sleep(wait)
+                    continue
+                logger.error(f"Gemini transcript analysis failed: {e}")
+                return self._mock_transcript_analysis(scenario_hint)
+
+    def _mock_transcript_analysis(self, scenario_hint: str) -> dict:
+        """Mock transcript analysis when Gemini is unavailable."""
+        hint = scenario_hint.lower()
+
+        if "bank" in hint and "impersonation" in hint:
+            return {
+                "tone_flags": ["urgency", "fear_induction", "false_authority"],
+                "phrase_flags": ["fraud department", "unauthorized activity", "account number", "don't hang up"],
+                "escalation_score": 85,
+                "reasoning": "Mock: Bank impersonation pattern with authority claims and credential requests.",
+                "scam_risk": 90,
+                "scam_type": "bank_fraud",
+                "scam_flags": ["requests account number", "requests PIN", "impersonates bank"],
+                "mock": True,
+            }
+        elif "investment" in hint:
+            return {
+                "tone_flags": ["urgency", "false_authority"],
+                "phrase_flags": ["guaranteed returns", "limited time", "wire transfer", "don't tell"],
+                "escalation_score": 80,
+                "reasoning": "Mock: Investment scam with unrealistic returns and pressure tactics.",
+                "scam_risk": 85,
+                "scam_type": "investment_scam",
+                "scam_flags": ["guaranteed returns", "pressure to wire money", "secrecy demand"],
+                "mock": True,
+            }
+        elif "credit" in hint and "scam" in hint:
+            return {
+                "tone_flags": ["urgency", "fear_induction", "false_authority", "isolation_tactics"],
+                "phrase_flags": ["security team", "suspicious transactions", "full card number", "don't contact your bank"],
+                "escalation_score": 88,
+                "reasoning": "Mock: Credit card impersonation scam with CVV request, time pressure, and isolation tactics.",
+                "scam_risk": 92,
+                "scam_type": "bank_fraud",
+                "scam_flags": ["requests card number", "requests CVV", "impersonates Visa", "isolation tactic", "time pressure"],
+                "mock": True,
+            }
+        elif "legitimate" in hint:
+            return {
+                "tone_flags": [],
+                "phrase_flags": [],
+                "escalation_score": 5,
+                "reasoning": "Mock: Normal customer service interaction with no manipulation indicators.",
+                "scam_risk": 3,
+                "scam_type": "none",
+                "scam_flags": [],
+                "mock": True,
+            }
+        else:
+            return {
+                "tone_flags": [],
+                "phrase_flags": [],
+                "escalation_score": 10,
+                "reasoning": "Mock: Insufficient data for analysis.",
+                "scam_risk": 5,
+                "scam_type": "none",
+                "scam_flags": [],
+                "mock": True,
+            }
 
     def reset(self):
         """Reset session state for a new call."""

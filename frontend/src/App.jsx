@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import RiskIndicator from './components/RiskIndicator'
 import ScoreTimeline from './components/ScoreTimeline'
 import FlaggedPhrases from './components/FlaggedPhrases'
@@ -9,50 +9,36 @@ import { useAudioCapture } from './hooks/useAudioCapture'
 import { useDashboard } from './hooks/useDashboard'
 import { useAuth } from './auth/AuthProvider'
 
-// Warning text shown on screen (no audio)
+// Warning text shown on screen
 const WARNING_TEXT = {
-  high: 'Danger! This call is very likely a scam. Hang up immediately and call your bank directly.',
-  medium: 'Caution. Some parts of this call seem suspicious. Stay alert and do not share personal information.',
-}
-
-// Play demo scenario audio in the browser.
-// We pre-create the Audio element on the user's click (trusted gesture) and set
-// src later when the backend sends the audio_url. This avoids browser autoplay blocks.
-let currentDemoAudio = null
-let pendingDemoAudio = null
-
-function prepareDemoAudio() {
-  stopDemoAudio()
-  // Create and "warm up" an Audio element inside the user gesture
-  pendingDemoAudio = new Audio()
-  pendingDemoAudio.preload = 'auto'
-}
-
-function playDemoAudio(url) {
-  if (!url) return
-  // Guard against double-play (multiple WebSocket messages with same audio_url)
-  if (currentDemoAudio && !currentDemoAudio.paused) return
-  if (pendingDemoAudio) {
-    currentDemoAudio = pendingDemoAudio
-    pendingDemoAudio = null
-    currentDemoAudio.src = url
-    currentDemoAudio.play().catch((e) => console.warn('Demo audio playback failed:', e))
-  } else {
-    currentDemoAudio = new Audio(url)
-    currentDemoAudio.play().catch((e) => console.warn('Demo audio playback failed:', e))
-  }
-}
-
-function stopDemoAudio() {
-  if (currentDemoAudio) {
-    currentDemoAudio.pause()
-    currentDemoAudio = null
-  }
-  pendingDemoAudio = null
+  high: 'DANGER! This call is very likely a scam. Hang up immediately and call your bank directly.',
+  medium: 'CAUTION: Some parts of this call seem suspicious. Stay alert.',
 }
 
 export default function App() {
+  const audioRef = useRef(null)
+  const [audioTime, setAudioTime] = useState(0)
   const { isCapturing, error: captureError, startCapture, stopCapture } = useAudioCapture()
+
+  const handleAudioUrl = useCallback((url) => {
+    if (audioRef.current) {
+      // Don't restart if already playing
+      if (!audioRef.current.paused && audioRef.current.src) return
+      audioRef.current.src = url
+      audioRef.current.play().catch((e) => console.warn('Audio playback failed:', e))
+    }
+  }, [])
+
+  const handleBeforeDemo = useCallback(() => {
+    // Stop any playing audio and reset time
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+      audioRef.current.src = ''
+    }
+    setAudioTime(0)
+  }, [])
+
   const {
     connected,
     latestUpdate,
@@ -63,10 +49,14 @@ export default function App() {
     demoRunning,
     runDemo,
     reset,
+    transcriptData,
+    analysisData,
+    demoScenario,
   } = useDashboard('ws://localhost:8000/ws/dashboard', {
-    onAudioUrl: (url) => playDemoAudio(url),
-    onBeforeDemo: () => prepareDemoAudio(),
+    onAudioUrl: handleAudioUrl,
+    onBeforeDemo: handleBeforeDemo,
   })
+
   const {
     isAuthenticated, isLoading, user, profile, mockMode,
     login, logout, updateProfile, addTrustedContact, removeTrustedContact, notifyContacts,
@@ -76,6 +66,15 @@ export default function App() {
   const [warningText, setWarningText] = useState('')
   const [bankNumber, setBankNumber] = useState('')
   const [showBankInput, setShowBankInput] = useState(false)
+
+  // Audio timeupdate handler
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    const onTimeUpdate = () => setAudioTime(audio.currentTime)
+    audio.addEventListener('timeupdate', onTimeUpdate)
+    return () => audio.removeEventListener('timeupdate', onTimeUpdate)
+  }, [])
 
   // Sync bank number from profile
   useEffect(() => {
@@ -102,79 +101,93 @@ export default function App() {
   }, [compositeLevel])
 
   const score = latestUpdate?.composite?.score ?? 0
-  const reasoning = latestUpdate?.gemini?.reasoning ?? ''
+  const reasoning = latestUpdate?.gemini?.reasoning
+    ?? analysisData?.reasoning
+    ?? ''
 
   return (
-    <div className="min-h-screen bg-surface-900 text-white">
-      {/* Header */}
-      <header className="border-b border-surface-700 px-6 py-4">
+    <div className="min-h-screen bg-crt-black text-crt-green font-mono crt-screen relative">
+      {/* CRT scanline overlay */}
+      <div className="crt-overlay" />
+
+      {/* Hidden audio element for demo playback */}
+      <audio ref={audioRef} preload="auto" />
+
+      {/* OS-style status bar */}
+      <header className="border-b-2 border-crt-border px-4 py-2">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">MoneySpeaks</h1>
-            <p className="text-sm text-gray-400">Real-time voice scam detection</p>
+          <div className="flex items-center gap-3">
+            <span className="font-pixel text-xs text-crt-green">
+              ░░ MONEYSPEAKS v1.0 ░░
+            </span>
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span
-                className={`w-2.5 h-2.5 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`}
-                title={connected ? 'Connected' : 'Disconnected'}
-              />
-              <span className="text-xs text-gray-400">
-                {connected ? 'Live' : 'Connecting...'}
+            <div className="flex items-center gap-2 font-mono text-sm">
+              <span className={connected ? 'text-crt-green' : 'text-crt-red'}>
+                [{connected ? '■' : '□'}]
+              </span>
+              <span className={connected ? 'text-crt-green' : 'text-crt-red'}>
+                {connected ? 'CONNECTED' : 'OFFLINE'}
               </span>
             </div>
             {isAuthenticated ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-300">{user?.name || user?.email || 'User'}</span>
-                {mockMode && <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded">demo</span>}
-                <button
-                  onClick={logout}
-                  className="text-xs text-gray-400 hover:text-white transition-colors"
-                >
-                  Logout
+              <div className="flex items-center gap-2 font-mono text-sm">
+                <span className="text-crt-green-dim">{user?.name || user?.email || 'USER'}</span>
+                {mockMode && <span className="text-crt-amber text-xs">[DEMO]</span>}
+                <button onClick={logout} className="text-crt-green-dim hover:text-crt-green">
+                  [LOGOUT]
                 </button>
               </div>
             ) : (
               <button
                 onClick={login}
-                className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                className="btn-retro bg-crt-green/10 text-crt-green px-3 py-1 text-sm"
               >
-                Login
+                [LOGIN]
               </button>
             )}
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className="max-w-7xl mx-auto px-4 py-4">
         {/* Warning banner */}
         {warningText && (
-          <div className={`mb-6 px-6 py-4 rounded-xl text-lg font-semibold text-center animate-pulse ${
+          <div className={`mb-4 px-4 py-3 font-mono text-lg text-center border-2 animate-pulse-fast ${
             compositeLevel === 'high'
-              ? 'bg-red-600/20 border-2 border-red-500 text-red-300'
-              : 'bg-yellow-600/20 border-2 border-yellow-500 text-yellow-300'
+              ? 'border-crt-red text-crt-red bg-crt-red/10'
+              : 'border-crt-amber text-crt-amber bg-crt-amber/10'
           }`}>
-            {warningText}
+            ⚠ {warningText}
           </div>
         )}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-          {/* Left column — Risk indicator + actions (60% focus) */}
-          <div className="lg:col-span-5 space-y-6">
-            <div className="bg-surface-800 rounded-2xl p-8 flex flex-col items-center">
-              <RiskIndicator level={compositeLevel} score={score} reasoning={reasoning} />
+        {/* Row 1: Demo scenarios (full width) */}
+        <div className="mb-4">
+          <DemoPlayer onRunDemo={runDemo} running={demoRunning} />
+        </div>
 
-              {/* Action buttons */}
-              <div className="mt-8 w-full space-y-3">
+        {/* Row 2: Score LEFT + Transcript RIGHT */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4">
+          {/* Left column — Risk + Actions */}
+          <div className="lg:col-span-5 space-y-4">
+            <RiskIndicator level={compositeLevel} score={score} reasoning={reasoning} />
+
+            {/* Action buttons */}
+            <div className="window-panel">
+              <div className="window-titlebar">
+                <span>[ ACTIONS ]</span>
+                <span>■</span>
+              </div>
+              <div className="p-4 space-y-3">
                 {/* Hang up and call bank */}
                 {compositeLevel === 'high' && bankNumber && (
                   <a
                     href={`tel:${bankNumber}`}
-                    className="block w-full bg-red-600 hover:bg-red-500 text-white text-center
-                               px-6 py-4 rounded-xl font-bold text-lg min-h-[64px]
-                               transition-colors"
+                    className="btn-retro block w-full bg-crt-red/20 text-crt-red
+                               text-center px-4 py-3 text-lg min-h-[48px]"
                   >
-                    Hang up & call my bank
+                    [!! HANG UP & CALL MY BANK !!]
                   </a>
                 )}
 
@@ -185,29 +198,27 @@ export default function App() {
                       <div className="flex gap-2">
                         <input
                           type="tel"
-                          placeholder="Your bank's phone number"
+                          placeholder="Bank phone number"
                           value={bankNumber}
                           onChange={(e) => setBankNumber(e.target.value)}
-                          className="flex-1 bg-surface-700 border border-gray-600 rounded-lg
-                                     px-4 py-3 text-base text-white"
+                          className="input-retro flex-1"
                         />
                         <button
                           onClick={() => {
                             updateProfile({ bank_number: bankNumber })
                             setShowBankInput(false)
                           }}
-                          className="bg-blue-600 px-4 py-3 rounded-lg font-medium"
+                          className="btn-retro bg-crt-green/10 text-crt-green px-3"
                         >
-                          Save
+                          [OK]
                         </button>
                       </div>
                     ) : (
                       <button
                         onClick={() => setShowBankInput(true)}
-                        className="w-full bg-surface-700 hover:bg-surface-900 text-gray-300
-                                   px-4 py-3 rounded-xl text-sm transition-colors"
+                        className="btn-retro w-full bg-crt-panel text-crt-green-dim px-4 py-2 text-sm"
                       >
-                        Set your bank's number for quick dial
+                        [Set bank number for quick dial]
                       </button>
                     )}
                   </div>
@@ -216,19 +227,17 @@ export default function App() {
                 {/* Mic capture */}
                 <button
                   onClick={isCapturing ? stopCapture : startCapture}
-                  className={`
-                    w-full px-6 py-4 rounded-xl font-semibold text-lg min-h-[64px]
-                    transition-colors
-                    ${isCapturing
-                      ? 'bg-red-700 hover:bg-red-600 text-white'
-                      : 'bg-blue-600 hover:bg-blue-500 text-white'}
-                  `}
+                  className={`btn-retro w-full px-4 py-3 text-lg min-h-[48px] ${
+                    isCapturing
+                      ? 'bg-crt-red/20 text-crt-red'
+                      : 'bg-crt-green/10 text-crt-green'
+                  }`}
                 >
-                  {isCapturing ? 'Stop listening' : 'Start listening'}
+                  {isCapturing ? '[■ STOP LISTENING]' : '[▶ START LISTENING]'}
                 </button>
 
                 {captureError && (
-                  <p className="text-red-400 text-sm text-center">{captureError}</p>
+                  <p className="text-crt-red text-sm text-center">{captureError}</p>
                 )}
               </div>
             </div>
@@ -242,60 +251,73 @@ export default function App() {
             />
           </div>
 
-          {/* Right column — Data panels */}
-          <div className="lg:col-span-7 space-y-6">
-            <DemoPlayer onRunDemo={runDemo} running={demoRunning} />
-            <ScoreTimeline data={scoreHistory} />
-            <FlaggedPhrases flags={allFlags} />
-            <LiveTranscript lines={transcriptLines} />
-
-            {/* Behavioral info */}
-            {latestUpdate?.behavioral && (
-              <div className="bg-surface-800 rounded-2xl p-6">
-                <h3 className="text-lg font-semibold mb-3">Behavioral Analysis</h3>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <p className="text-2xl font-bold">
-                      {latestUpdate.behavioral.response_latency_ms ?? '—'}
-                      <span className="text-sm font-normal text-gray-400">ms</span>
-                    </p>
-                    <p className="text-xs text-gray-400">Response latency</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">
-                      {latestUpdate.behavioral.disfluency_rate ?? '—'}
-                      <span className="text-sm font-normal text-gray-400">/min</span>
-                    </p>
-                    <p className="text-xs text-gray-400">Disfluency rate</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">
-                      {latestUpdate.behavioral.speech_ratio != null
-                        ? `${Math.round(latestUpdate.behavioral.speech_ratio * 100)}%`
-                        : '—'}
-                    </p>
-                    <p className="text-xs text-gray-400">Speech ratio</p>
-                  </div>
-                </div>
-                {latestUpdate.behavioral.flags?.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {latestUpdate.behavioral.flags.map((f, i) => (
-                      <span key={i} className="px-2 py-1 bg-yellow-500/20 text-yellow-300 text-xs rounded-full">
-                        {f}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+          {/* Right column — Transcript */}
+          <div className="lg:col-span-7">
+            <LiveTranscript
+              transcriptData={transcriptData}
+              analysisData={analysisData}
+              audioTime={audioTime}
+              lines={transcriptLines}
+            />
           </div>
         </div>
+
+        {/* Row 3: Analytics — charts and flags side by side */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+          <ScoreTimeline data={scoreHistory} />
+          <FlaggedPhrases flags={allFlags} />
+        </div>
+
+        {/* Behavioral info */}
+        {latestUpdate?.behavioral && (
+          <div className="window-panel mb-4">
+            <div className="window-titlebar">
+              <span>[ BEHAVIORAL ANALYSIS ]</span>
+              <span>■</span>
+            </div>
+            <div className="p-4">
+              <div className="grid grid-cols-3 gap-4 text-center font-mono">
+                <div>
+                  <p className="text-2xl text-crt-green">
+                    {latestUpdate.behavioral.response_latency_ms ?? '—'}
+                    <span className="text-sm text-crt-green-dim">ms</span>
+                  </p>
+                  <p className="text-xs text-crt-green-dim">Response latency</p>
+                </div>
+                <div>
+                  <p className="text-2xl text-crt-green">
+                    {latestUpdate.behavioral.disfluency_rate ?? '—'}
+                    <span className="text-sm text-crt-green-dim">/min</span>
+                  </p>
+                  <p className="text-xs text-crt-green-dim">Disfluency rate</p>
+                </div>
+                <div>
+                  <p className="text-2xl text-crt-green">
+                    {latestUpdate.behavioral.speech_ratio != null
+                      ? `${Math.round(latestUpdate.behavioral.speech_ratio * 100)}%`
+                      : '—'}
+                  </p>
+                  <p className="text-xs text-crt-green-dim">Speech ratio</p>
+                </div>
+              </div>
+              {latestUpdate.behavioral.flags?.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {latestUpdate.behavioral.flags.map((f, i) => (
+                    <span key={i} className="font-mono text-sm text-crt-amber border border-crt-amber/40 bg-crt-amber/10 px-2 py-1">
+                      [!] {f}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-surface-700 px-6 py-3 mt-8">
-        <p className="text-center text-xs text-gray-500">
-          MoneySpeaks — HackDuke 2026 Finance Track
+      <footer className="border-t-2 border-crt-border px-4 py-2 mt-4">
+        <p className="text-center font-mono text-xs text-crt-green-dark">
+          MoneySpeaks — HackDuke 2026 Finance Track — Protecting elderly users from voice fraud
         </p>
       </footer>
     </div>

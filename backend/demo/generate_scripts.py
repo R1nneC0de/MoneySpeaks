@@ -28,7 +28,8 @@ VOICE_C = "fVVjLtJgnQI61CoImgHU"  # Neutral / friendly
 SCENARIO_VOICES = {
     "bank_impersonation": (VOICE_A, VOICE_B),       # scammer=male, victim=female
     "investment_scam": (VOICE_A, VOICE_B),           # scammer=male, victim=female
-    "legitimate_bank_call": (VOICE_B, VOICE_C),      # customer=female, bank agent=neutral
+    "legitimate_bank_call": (VOICE_C, VOICE_B),      # customer=neutral, bank agent=female
+    "credit_card_scam": (VOICE_B, VOICE_C),          # scammer=female, victim=neutral
 }
 
 
@@ -63,14 +64,27 @@ def get_hardcoded_scripts():
             "text": (
                 "A: Hi, I'm calling about a charge on my credit card statement that I don't recognize. It says Meridian Services for forty-seven dollars.\n"
                 "B: Of course, I can help you with that. Can I verify your name and the last four digits of your account number?\n"
-                "A: Sure, it's Margaret Chen, and the last four are 8-3-1-2.\n"
-                "B: Thank you, Margaret. Let me pull up your account. I see the charge from Meridian Services on March 15th. That appears to be a subscription service. Would you like me to look into it further?\n"
+                "A: Sure, it's Michael Chen, and the last four are 8-3-1-2.\n"
+                "B: Thank you, Michael. Let me pull up your account. I see the charge from Meridian Services on March 15th. That appears to be a subscription service. Would you like me to look into it further?\n"
                 "A: Yes please. I don't remember signing up for any subscription.\n"
                 "B: No problem. I'll open a dispute for that charge. You'll receive a provisional credit within two business days, and we'll investigate. Is there anything else I can help you with?\n"
                 "A: No, that's all. Thank you so much for your help.\n"
-                "B: You're welcome, Margaret. Have a great day.\n"
+                "B: You're welcome, Michael. Have a great day.\n"
             ),
             "label": "REAL",
+        },
+        "credit_card_scam": {
+            "text": (
+                "A: Good afternoon. This is the security team at Visa. We've flagged your credit card ending in 4-7-2-1 for suspicious overseas transactions.\n"
+                "B: What? I haven't made any overseas purchases.\n"
+                "A: That's exactly why we're calling. Three charges totaling two thousand eight hundred dollars were attempted from an IP address in Romania. We've temporarily frozen the transactions but need to verify your identity before we can release the hold.\n"
+                "B: Oh no, what do I need to do?\n"
+                "A: For security purposes, I'll need your full card number and the three-digit code on the back so I can cross-reference it with our fraud database.\n"
+                "B: Um, okay. Let me grab my wallet.\n"
+                "A: Please hurry. If we can't verify within the next ten minutes, the freeze will expire and those charges will go through. Also, I need to advise you not to contact your bank separately — our fraud team is already coordinating with them, and multiple inquiries could delay the resolution.\n"
+                "B: Alright, the card number is...\n"
+            ),
+            "label": "FAKE",
         },
     }
 
@@ -112,6 +126,19 @@ Example:
 A: Hi, I'm calling about a charge on my statement I don't recognize.
 B: Of course, I can help with that.""",
     },
+    "credit_card_scam": {
+        "label": "FAKE",
+        "prompt": """Write a realistic two-way phone scam conversation where someone impersonates a credit card company's security team calling an elderly person.
+The scammer should claim to be from Visa's security team, describe suspicious overseas transactions,
+create urgency about a time-limited fraud hold, request the full card number and CVV code,
+and warn the victim not to contact their bank separately.
+The victim should be alarmed and gradually complying.
+Keep it under 45 seconds of speech total.
+IMPORTANT: Format EXACTLY as alternating lines prefixed with A: or B: (A = scammer, B = victim).
+Example:
+A: Good afternoon, this is the security team at Visa.
+B: Oh, what's going on?""",
+    },
 }
 
 
@@ -130,8 +157,20 @@ def generate_scripts_with_gemini():
 
     client = genai.Client(api_key=api_key)
 
+    # Start with hardcoded scripts as base — legitimate call ALWAYS uses
+    # the hardcoded version so we control exactly what's in it.
+    hardcoded = get_hardcoded_scripts()
     scripts = {}
+
     for name, config in SCRIPTS.items():
+        # Skip legitimate call — Gemini tends to generate scripts where
+        # the agent asks for full card numbers / maiden names, which our
+        # system correctly flags as suspicious. Use the known-safe hardcoded version.
+        if config["label"] == "REAL":
+            print(f"Using hardcoded script: {name} (safe baseline)")
+            scripts[name] = hardcoded[name]
+            continue
+
         print(f"Generating script: {name}...")
         try:
             response = client.models.generate_content(
@@ -145,8 +184,14 @@ def generate_scripts_with_gemini():
             print(f"  Done: {len(response.text)} chars")
         except Exception as e:
             print(f"  Gemini failed: {e}")
-            print("  Falling back to fallback scripts for all remaining.")
-            return get_hardcoded_scripts()
+            print(f"  Using hardcoded fallback for {name}")
+            if name in hardcoded:
+                scripts[name] = hardcoded[name]
+
+    # Ensure all scenarios are present (fill from hardcoded)
+    for name in hardcoded:
+        if name not in scripts:
+            scripts[name] = hardcoded[name]
 
     return scripts
 

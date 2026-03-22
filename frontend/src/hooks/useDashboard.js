@@ -2,6 +2,10 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 
 /**
  * Manages WebSocket connection to /ws/dashboard and state for all score data.
+ *
+ * Handles two message protocols:
+ * - New demo protocol: demo_start → chunk_update → demo_end
+ * - Legacy live mic protocol: flat score objects (no type field)
  */
 export function useDashboard(wsUrl = 'ws://localhost:8000/ws/dashboard', { onAudioUrl, onBeforeDemo } = {}) {
   const [connected, setConnected] = useState(false)
@@ -11,6 +15,12 @@ export function useDashboard(wsUrl = 'ws://localhost:8000/ws/dashboard', { onAud
   const [allFlags, setAllFlags] = useState([])
   const [compositeLevel, setCompositeLevel] = useState('low')
   const [demoRunning, setDemoRunning] = useState(false)
+
+  // New demo protocol state
+  const [transcriptData, setTranscriptData] = useState(null)  // {text, words}
+  const [analysisData, setAnalysisData] = useState(null)       // Gemini analysis
+  const [demoScenario, setDemoScenario] = useState(null)
+
   const wsRef = useRef(null)
   const pingRef = useRef(null)
   const mountedRef = useRef(false)
@@ -26,7 +36,6 @@ export function useDashboard(wsUrl = 'ws://localhost:8000/ws/dashboard', { onAud
     let reconnectTimer = null
 
     function connect() {
-      // Don't connect if unmounted or already open
       if (!mountedRef.current) return
       if (wsRef.current?.readyState === WebSocket.OPEN ||
           wsRef.current?.readyState === WebSocket.CONNECTING) return
@@ -49,6 +58,60 @@ export function useDashboard(wsUrl = 'ws://localhost:8000/ws/dashboard', { onAud
           const data = JSON.parse(event.data)
           if (data.type === 'pong') return
 
+          // --- New demo protocol ---
+          if (data.type === 'demo_start') {
+            setTranscriptData(data.transcript)
+            setAnalysisData(null) // No analysis yet — it arrives progressively
+            setDemoScenario(data.scenario)
+            // Trigger audio playback
+            if (data.audio_url && callbacksRef.current.onAudioUrl) {
+              callbacksRef.current.onAudioUrl(data.audio_url)
+            }
+            return
+          }
+
+          if (data.type === 'chunk_update') {
+            setLatestUpdate(data)
+
+            // Update score history for chart
+            setScoreHistory((prev) => {
+              const next = [...prev, {
+                time: new Date(data.timestamp * 1000).toLocaleTimeString(),
+                deepfake: data.deepfake_score,
+                composite: data.composite?.score ?? 0,
+              }]
+              return next.slice(-60)
+            })
+
+            // Progressive analysis — update analysisData and accumulate flags
+            if (data.analysis) {
+              setAnalysisData(data.analysis)
+
+              // Collect all current flags from this chunk's progressive analysis
+              const chunkFlags = [
+                ...(data.analysis.tone_flags ?? []),
+                ...(data.analysis.phrase_flags ?? []),
+                ...(data.analysis.scam_flags ?? []),
+                ...(data.behavioral?.flags ?? []),
+              ]
+              if (chunkFlags.length > 0) {
+                setAllFlags(chunkFlags.map((f) => ({
+                  text: f,
+                  timestamp: data.timestamp,
+                })))
+              }
+            }
+
+            setCompositeLevel(data.composite?.level ?? 'low')
+            return
+          }
+
+          if (data.type === 'demo_end') {
+            setDemoRunning(false)
+            return
+          }
+
+          // --- Legacy live mic protocol (no type field) ---
           setLatestUpdate(data)
 
           if (data.audio_url && callbacksRef.current.onAudioUrl) {
@@ -105,7 +168,6 @@ export function useDashboard(wsUrl = 'ws://localhost:8000/ws/dashboard', { onAud
       ws.onclose = () => {
         setConnected(false)
         clearInterval(pingRef.current)
-        // Only reconnect if still mounted
         if (mountedRef.current) {
           reconnectTimer = setTimeout(connect, 2000)
         }
@@ -123,7 +185,7 @@ export function useDashboard(wsUrl = 'ws://localhost:8000/ws/dashboard', { onAud
       clearTimeout(reconnectTimer)
       clearInterval(pingRef.current)
       if (wsRef.current) {
-        wsRef.current.onclose = null // prevent reconnect on cleanup close
+        wsRef.current.onclose = null
         wsRef.current.close()
         wsRef.current = null
       }
@@ -137,6 +199,9 @@ export function useDashboard(wsUrl = 'ws://localhost:8000/ws/dashboard', { onAud
     setTranscriptLines([])
     setAllFlags([])
     setCompositeLevel('low')
+    setTranscriptData(null)
+    setAnalysisData(null)
+    setDemoScenario(null)
   }, [])
 
   const runDemo = useCallback(async (scenario) => {
@@ -162,5 +227,9 @@ export function useDashboard(wsUrl = 'ws://localhost:8000/ws/dashboard', { onAud
     demoRunning,
     runDemo,
     reset,
+    // New demo protocol state
+    transcriptData,
+    analysisData,
+    demoScenario,
   }
 }
