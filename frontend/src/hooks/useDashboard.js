@@ -3,7 +3,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 /**
  * Manages WebSocket connection to /ws/dashboard and state for all score data.
  */
-export function useDashboard(wsUrl = 'ws://localhost:8000/ws/dashboard') {
+export function useDashboard(wsUrl = 'ws://localhost:8000/ws/dashboard', { onAudioUrl } = {}) {
   const [connected, setConnected] = useState(false)
   const [latestUpdate, setLatestUpdate] = useState(null)
   const [scoreHistory, setScoreHistory] = useState([])
@@ -36,6 +36,11 @@ export function useDashboard(wsUrl = 'ws://localhost:8000/ws/dashboard') {
         if (data.type === 'pong') return
 
         setLatestUpdate(data)
+
+        // Notify about demo audio URL (first chunk of a demo)
+        if (data.audio_url && onAudioUrl) {
+          onAudioUrl(data.audio_url)
+        }
 
         // Append to score history
         setScoreHistory((prev) => {

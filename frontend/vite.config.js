@@ -13,6 +13,9 @@ export default defineConfig({
       '/demo': {
         target: 'http://localhost:8000',
       },
+      '/demo-audio': {
+        target: 'http://localhost:8000',
+      },
       '/health': {
         target: 'http://localhost:8000',
       },

@@ -9,37 +9,63 @@ import { useAudioCapture } from './hooks/useAudioCapture'
 import { useDashboard } from './hooks/useDashboard'
 import { useAuth } from './auth/AuthProvider'
 
-// TTS warning phrases — plays via browser SpeechSynthesis (zero-key fallback)
+// Distinct TTS warning phrases per risk level
 const WARNINGS = {
-  high: 'Warning: this call shows signs of a scam. Consider hanging up.',
-  medium: 'Caution: suspicious activity detected on this call.',
+  high: {
+    text: 'Danger! This call is very likely a scam. Hang up immediately and call your bank directly.',
+    audio: '/warnings/warning_scam.mp3',
+    rate: 0.85,
+    pitch: 0.9,
+  },
+  medium: {
+    text: 'Caution. Some parts of this call seem suspicious. Stay alert and do not share personal information.',
+    audio: '/warnings/caution_suspicious.mp3',
+    rate: 0.95,
+    pitch: 1.0,
+  },
 }
 
 function speakWarning(level, lastSpokenRef) {
   const now = Date.now()
-  // Don't repeat warnings within 15 seconds
-  if (now - lastSpokenRef.current < 15000) return
-  const text = WARNINGS[level]
-  if (!text) return
+  // Don't repeat warnings within 20 seconds
+  if (now - lastSpokenRef.current < 20000) return
+  const config = WARNINGS[level]
+  if (!config) return
 
   lastSpokenRef.current = now
 
   // Try pre-cached ElevenLabs audio first
-  const audioMap = {
-    high: '/warnings/warning_scam.mp3',
-    medium: '/warnings/caution_suspicious.mp3',
-  }
-  const audio = new Audio(audioMap[level])
+  const audio = new Audio(config.audio)
   audio.play().catch(() => {
     // Fallback to browser SpeechSynthesis
     if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.rate = 0.9
-      utterance.pitch = 1
+      speechSynthesis.cancel() // Stop any current speech
+      const utterance = new SpeechSynthesisUtterance(config.text)
+      utterance.rate = config.rate
+      utterance.pitch = config.pitch
       utterance.volume = 1
       speechSynthesis.speak(utterance)
     }
   })
+}
+
+// Play demo scenario audio in the browser
+let currentDemoAudio = null
+function playDemoAudio(url) {
+  if (currentDemoAudio) {
+    currentDemoAudio.pause()
+    currentDemoAudio = null
+  }
+  if (url) {
+    currentDemoAudio = new Audio(url)
+    currentDemoAudio.play().catch((e) => console.warn('Demo audio playback failed:', e))
+  }
+}
+function stopDemoAudio() {
+  if (currentDemoAudio) {
+    currentDemoAudio.pause()
+    currentDemoAudio = null
+  }
 }
 
 export default function App() {
@@ -54,13 +80,16 @@ export default function App() {
     demoRunning,
     runDemo,
     reset,
-  } = useDashboard()
+  } = useDashboard('ws://localhost:8000/ws/dashboard', {
+    onAudioUrl: (url) => playDemoAudio(url),
+  })
   const {
     isAuthenticated, isLoading, user, profile, mockMode,
     login, logout, updateProfile, addTrustedContact, removeTrustedContact, notifyContacts,
   } = useAuth()
 
   const lastSpokenRef = useRef(0)
+  const prevLevelRef = useRef('low')
   const [bankNumber, setBankNumber] = useState('')
   const [showBankInput, setShowBankInput] = useState(false)
 
@@ -71,10 +100,18 @@ export default function App() {
     }
   }, [profile])
 
-  // Speak warnings on risk level changes
+  // Speak warnings only on level transitions (low→medium, medium→high, low→high)
   useEffect(() => {
-    if (compositeLevel === 'high' || compositeLevel === 'medium') {
-      speakWarning(compositeLevel, lastSpokenRef)
+    const prev = prevLevelRef.current
+    const curr = compositeLevel
+    prevLevelRef.current = curr
+
+    const escalated =
+      (prev === 'low' && (curr === 'medium' || curr === 'high')) ||
+      (prev === 'medium' && curr === 'high')
+
+    if (escalated) {
+      speakWarning(curr, lastSpokenRef)
     }
   }, [compositeLevel])
 
