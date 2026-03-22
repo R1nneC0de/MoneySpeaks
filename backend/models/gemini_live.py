@@ -106,32 +106,32 @@ class GeminiLiveSession:
     def _mock_bank_scenario(self, chunk: int) -> dict:
         phases = [
             {
-                "transcript": "Hello, this is the fraud department at your bank.",
+                "transcript": "Hello, this is the fraud department at your bank. We've detected unauthorized activity on your account. Oh my goodness, what kind of activity?",
                 "tone_flags": ["false_authority"],
-                "phrase_flags": ["fraud department"],
-                "escalation_score": 30,
-                "reasoning": "Caller claims authority. Monitoring for further indicators.",
+                "phrase_flags": ["fraud department", "unauthorized activity"],
+                "escalation_score": 35,
+                "reasoning": "Caller claims bank authority and reports urgent account activity. Monitoring for further indicators.",
             },
             {
-                "transcript": "We've detected unauthorized activity on your account. I need to verify your identity immediately.",
+                "transcript": "Someone is attempting to transfer funds from your savings. We need to verify your identity immediately. Oh no, what do I need to do?",
                 "tone_flags": ["urgency", "false_authority"],
-                "phrase_flags": ["verify your account", "unauthorized activity"],
-                "escalation_score": 55,
-                "reasoning": "Urgency combined with identity verification request. Escalating risk.",
+                "phrase_flags": ["verify your identity", "transfer funds"],
+                "escalation_score": 60,
+                "reasoning": "Urgency combined with identity verification request. Victim is complying. Escalating risk.",
             },
             {
-                "transcript": "Please provide your account number and PIN so we can secure your funds before they're stolen.",
+                "transcript": "I'll need your account number and PIN to secure your funds. Okay, let me find my card. Please hurry, the transfer is still in progress.",
                 "tone_flags": ["urgency", "fear_induction"],
-                "phrase_flags": ["provide your account number", "PIN", "stolen"],
+                "phrase_flags": ["account number", "PIN", "secure your funds"],
                 "escalation_score": 85,
-                "reasoning": "Requesting sensitive credentials over phone with fear pressure. High-confidence scam pattern.",
+                "reasoning": "Requesting sensitive credentials over phone with time pressure. High-confidence scam pattern.",
             },
             {
-                "transcript": "If you don't act now, your entire savings could be gone by tomorrow. Don't call anyone else.",
+                "transcript": "Don't hang up or contact anyone else. This is time-sensitive and we need to keep this line open to protect your savings.",
                 "tone_flags": ["urgency", "fear_induction", "isolation_tactics"],
-                "phrase_flags": ["act now", "don't call anyone"],
+                "phrase_flags": ["don't contact anyone", "time-sensitive"],
                 "escalation_score": 95,
-                "reasoning": "Maximum risk: urgency, financial threat, isolation demand. Classic bank fraud script.",
+                "reasoning": "Maximum risk: isolation demand, financial threat, urgency. Classic bank fraud script.",
             },
         ]
         idx = min(chunk - 1, len(phases) - 1)
@@ -140,25 +140,25 @@ class GeminiLiveSession:
     def _mock_grandparent_scenario(self, chunk: int) -> dict:
         phases = [
             {
-                "transcript": "Grandma? It's me... I'm in trouble.",
+                "transcript": "Grandma? It's me, I'm in trouble. Who is this? Tommy, is that you? You sound different.",
                 "tone_flags": ["sympathy_exploitation"],
                 "phrase_flags": [],
                 "escalation_score": 25,
-                "reasoning": "Emotional opening. Could be legitimate distress or social engineering.",
+                "reasoning": "Emotional opening with identity claim. Victim questioning voice difference is notable.",
             },
             {
-                "transcript": "I got into an accident and I'm at the police station. Please don't tell mom and dad.",
+                "transcript": "Yeah it's me, I hurt my nose in the accident. I'm at the police station. Oh my Lord, are you okay?",
                 "tone_flags": ["sympathy_exploitation", "isolation_tactics"],
-                "phrase_flags": ["don't tell"],
+                "phrase_flags": ["accident", "police station"],
                 "escalation_score": 55,
-                "reasoning": "Secrecy request is a strong social engineering indicator.",
+                "reasoning": "Excuse for voice mismatch plus distress scenario. Classic grandparent scam setup.",
             },
             {
-                "transcript": "I need you to send money right away for bail. Can you go to the store and get gift cards?",
-                "tone_flags": ["urgency", "sympathy_exploitation"],
-                "phrase_flags": ["I need money", "right away", "gift cards"],
+                "transcript": "I need bail money right away. Can you get some gift cards? I need two thousand dollars. And please don't tell Mom and Dad.",
+                "tone_flags": ["urgency", "sympathy_exploitation", "isolation_tactics"],
+                "phrase_flags": ["gift cards", "don't tell", "right away", "bail money"],
                 "escalation_score": 90,
-                "reasoning": "Gift card payment request is a definitive scam indicator. High confidence.",
+                "reasoning": "Gift card payment request plus secrecy demand. Definitive scam indicators.",
             },
         ]
         idx = min(chunk - 1, len(phases) - 1)
@@ -167,21 +167,21 @@ class GeminiLiveSession:
     def _mock_real_scenario(self, chunk: int) -> dict:
         phases = [
             {
-                "transcript": "Hi, I'm calling about the appointment we scheduled for next Tuesday.",
+                "transcript": "Hi, I'm calling about the appointment for next Tuesday at 2pm. Of course, let me pull that up. Yes, Tuesday the 25th at 2 o'clock.",
                 "tone_flags": [],
                 "phrase_flags": [],
                 "escalation_score": 3,
-                "reasoning": "Normal conversational tone, no suspicious indicators.",
+                "reasoning": "Normal conversational tone between caller and receptionist. No suspicious indicators.",
             },
             {
-                "transcript": "I just wanted to confirm the time and let you know I might be a few minutes late.",
+                "transcript": "I just wanted to confirm and let you know I might be a few minutes late. Traffic has been terrible. That's no problem at all, we'll be ready for you.",
                 "tone_flags": [],
                 "phrase_flags": [],
                 "escalation_score": 2,
-                "reasoning": "Polite, low-pressure conversation. No risk indicators.",
+                "reasoning": "Polite, low-pressure exchange. Routine scheduling conversation.",
             },
             {
-                "transcript": "Great, thank you. I'll see you then. Have a good day!",
+                "transcript": "Great, thank you so much. I'll see you then! Sounds good, have a wonderful day!",
                 "tone_flags": [],
                 "phrase_flags": [],
                 "escalation_score": 1,

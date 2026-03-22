@@ -23,35 +23,40 @@ SCRIPTS = {
     "bank_impersonation": {
         "label": "FAKE",
         "voice_id": "Ock0AL5DBkvTUDePt4Hm",
-        "prompt": """Write a realistic phone scam script where someone impersonates a bank's fraud department.
-The caller should:
+        "prompt": """Write a realistic two-way phone scam conversation where someone impersonates a bank's fraud department calling an elderly person.
+Include both sides of the conversation: the scammer and the victim.
+The scammer should:
 1. Claim to be from the fraud department
 2. Create urgency about unauthorized activity
 3. Request account number and PIN
 4. Pressure the victim not to contact anyone else
-Keep it under 45 seconds of speech. Write only the scammer's dialogue, one line per utterance.""",
+The victim should sound confused and worried, gradually complying.
+Keep it under 45 seconds of speech. Format as a natural dialogue with no speaker labels.""",
     },
     "grandparent_scam": {
         "label": "FAKE",
         "voice_id": "oO7sLA3dWfQXsKeSAjpA",
-        "prompt": """Write a realistic grandparent scam phone script.
-The caller should:
+        "prompt": """Write a realistic two-way grandparent scam phone conversation.
+Include both sides: the scammer pretending to be a grandchild, and the elderly grandparent.
+The scammer should:
 1. Pretend to be a grandchild in distress
-2. Claim to be in jail or hospital
+2. Claim to be in jail or had an accident
 3. Ask for money urgently via gift cards
 4. Beg the victim not to tell other family members
-Keep it under 45 seconds. Write only the scammer's dialogue.""",
+The grandparent should sound concerned and loving, gradually agreeing to help.
+Keep it under 45 seconds. Format as natural dialogue with no speaker labels.""",
     },
     "real_customer": {
         "label": "REAL",
         "voice_id": "fVVjLtJgnQI61CoImgHU",
-        "prompt": """Write a normal, legitimate phone conversation script.
+        "prompt": """Write a normal, legitimate two-way phone conversation.
+Include both sides: a caller and a receptionist.
 The caller should:
 1. Call about a scheduled appointment
 2. Confirm details politely
-3. Mention they might be late
-4. End the call naturally
-Keep it under 30 seconds. Write only the caller's dialogue.""",
+3. Mention they might be a few minutes late
+The receptionist should be friendly and helpful.
+Keep it under 30 seconds. Format as natural dialogue with no speaker labels.""",
     },
 }
 
@@ -98,11 +103,14 @@ def get_hardcoded_scripts():
     return {
         "bank_impersonation": {
             "text": (
-                "Hello, this is the fraud department at your bank. "
-                "We've detected unauthorized activity on your account and need to verify your identity immediately. "
-                "I'll need your account number and the last four digits of your PIN to secure your funds. "
-                "Please don't hang up or contact anyone else — this is time-sensitive and your savings are at risk. "
-                "If you don't act now, we won't be able to prevent the unauthorized transfer."
+                "Hello, this is the fraud department at your bank. We've detected some unauthorized activity on your account. "
+                "Oh my goodness, what kind of activity? "
+                "It appears someone is attempting to transfer funds out of your savings. We need to verify your identity immediately to stop it. "
+                "Oh no, that's terrible. What do I need to do? "
+                "I'll need your account number and the last four digits of your PIN so we can secure your funds right away. "
+                "Okay, let me find my card. It's, um... "
+                "Please hurry, ma'am. The transfer is still in progress. And please don't hang up or contact anyone else. "
+                "This is time-sensitive and we need to keep this line open to protect your savings."
             ),
             "voice_id": "Ock0AL5DBkvTUDePt4Hm",
             "label": "FAKE",
@@ -110,10 +118,13 @@ def get_hardcoded_scripts():
         "grandparent_scam": {
             "text": (
                 "Grandma? It's me... I'm in trouble. "
-                "I got into a car accident and I'm at the police station. "
-                "Please don't tell mom and dad, they'll be so upset. "
-                "I need bail money right away — can you go to the store and get some gift cards? "
-                "I need about two thousand dollars. Please hurry, I'm scared."
+                "Who is this? Tommy, is that you? You sound different. "
+                "Yeah, it's me. I, I hurt my nose in the accident. I'm at the police station, Grandma. "
+                "Oh my Lord, are you okay? What happened? "
+                "I got into a car accident and they're saying I need bail money right away. "
+                "Can you go to the store and get some gift cards? I need about two thousand dollars. "
+                "Of course, sweetheart. Let me get my purse. "
+                "And Grandma, please, please don't tell Mom and Dad. They'll be so upset with me. I'm so scared."
             ),
             "voice_id": "oO7sLA3dWfQXsKeSAjpA",
             "label": "FAKE",
@@ -121,9 +132,11 @@ def get_hardcoded_scripts():
         "real_customer": {
             "text": (
                 "Hi, I'm calling about the appointment we scheduled for next Tuesday at 2pm. "
-                "I just wanted to confirm the time and let you know I might be a few minutes late. "
-                "Traffic has been terrible this week. "
-                "Great, thank you so much. I'll see you then. Have a wonderful day!"
+                "Of course! Let me pull that up. Yes, I see it right here. Tuesday the 25th at 2 o'clock. "
+                "Perfect. I just wanted to confirm and let you know I might be a few minutes late. Traffic has been terrible this week. "
+                "That's no problem at all. We'll have everything ready for you whenever you arrive. "
+                "Great, thank you so much. I really appreciate it. I'll see you then! "
+                "Sounds good. Have a wonderful day!"
             ),
             "voice_id": "fVVjLtJgnQI61CoImgHU",
             "label": "REAL",

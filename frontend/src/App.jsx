@@ -9,44 +9,10 @@ import { useAudioCapture } from './hooks/useAudioCapture'
 import { useDashboard } from './hooks/useDashboard'
 import { useAuth } from './auth/AuthProvider'
 
-// Distinct TTS warning phrases per risk level
-const WARNINGS = {
-  high: {
-    text: 'Danger! This call is very likely a scam. Hang up immediately and call your bank directly.',
-    audio: '/warnings/warning_scam.mp3',
-    rate: 0.85,
-    pitch: 0.9,
-  },
-  medium: {
-    text: 'Caution. Some parts of this call seem suspicious. Stay alert and do not share personal information.',
-    audio: '/warnings/caution_suspicious.mp3',
-    rate: 0.95,
-    pitch: 1.0,
-  },
-}
-
-function speakWarning(level, lastSpokenRef) {
-  const now = Date.now()
-  // Don't repeat warnings within 20 seconds
-  if (now - lastSpokenRef.current < 20000) return
-  const config = WARNINGS[level]
-  if (!config) return
-
-  lastSpokenRef.current = now
-
-  // Try pre-cached ElevenLabs audio first
-  const audio = new Audio(config.audio)
-  audio.play().catch(() => {
-    // Fallback to browser SpeechSynthesis
-    if ('speechSynthesis' in window) {
-      speechSynthesis.cancel() // Stop any current speech
-      const utterance = new SpeechSynthesisUtterance(config.text)
-      utterance.rate = config.rate
-      utterance.pitch = config.pitch
-      utterance.volume = 1
-      speechSynthesis.speak(utterance)
-    }
-  })
+// Warning text shown on screen (no audio)
+const WARNING_TEXT = {
+  high: 'Danger! This call is very likely a scam. Hang up immediately and call your bank directly.',
+  medium: 'Caution. Some parts of this call seem suspicious. Stay alert and do not share personal information.',
 }
 
 // Play demo scenario audio in the browser.
@@ -64,13 +30,14 @@ function prepareDemoAudio() {
 
 function playDemoAudio(url) {
   if (!url) return
+  // Guard against double-play (multiple WebSocket messages with same audio_url)
+  if (currentDemoAudio && !currentDemoAudio.paused) return
   if (pendingDemoAudio) {
     currentDemoAudio = pendingDemoAudio
     pendingDemoAudio = null
     currentDemoAudio.src = url
     currentDemoAudio.play().catch((e) => console.warn('Demo audio playback failed:', e))
   } else {
-    // Fallback: try direct play (may be blocked by browser)
     currentDemoAudio = new Audio(url)
     currentDemoAudio.play().catch((e) => console.warn('Demo audio playback failed:', e))
   }
@@ -105,8 +72,8 @@ export default function App() {
     login, logout, updateProfile, addTrustedContact, removeTrustedContact, notifyContacts,
   } = useAuth()
 
-  const lastSpokenRef = useRef(0)
   const prevLevelRef = useRef('low')
+  const [warningText, setWarningText] = useState('')
   const [bankNumber, setBankNumber] = useState('')
   const [showBankInput, setShowBankInput] = useState(false)
 
@@ -117,7 +84,7 @@ export default function App() {
     }
   }, [profile])
 
-  // Speak warnings only on level transitions (low→medium, medium→high, low→high)
+  // Show warning text on level transitions
   useEffect(() => {
     const prev = prevLevelRef.current
     const curr = compositeLevel
@@ -127,8 +94,10 @@ export default function App() {
       (prev === 'low' && (curr === 'medium' || curr === 'high')) ||
       (prev === 'medium' && curr === 'high')
 
-    if (escalated) {
-      speakWarning(curr, lastSpokenRef)
+    if (escalated && WARNING_TEXT[curr]) {
+      setWarningText(WARNING_TEXT[curr])
+    } else if (curr === 'low') {
+      setWarningText('')
     }
   }, [compositeLevel])
 
@@ -178,6 +147,16 @@ export default function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6">
+        {/* Warning banner */}
+        {warningText && (
+          <div className={`mb-6 px-6 py-4 rounded-xl text-lg font-semibold text-center animate-pulse ${
+            compositeLevel === 'high'
+              ? 'bg-red-600/20 border-2 border-red-500 text-red-300'
+              : 'bg-yellow-600/20 border-2 border-yellow-500 text-yellow-300'
+          }`}>
+            {warningText}
+          </div>
+        )}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
           {/* Left column — Risk indicator + actions (60% focus) */}
