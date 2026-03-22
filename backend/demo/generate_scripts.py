@@ -75,13 +75,18 @@ def generate_scripts_with_gemini():
     scripts = {}
     for name, config in SCRIPTS.items():
         print(f"Generating script: {name}...")
-        response = model.generate_content(config["prompt"])
-        scripts[name] = {
-            "text": response.text,
-            "voice_id": config["voice_id"],
-            "label": config["label"],
-        }
-        print(f"  Done: {len(response.text)} chars")
+        try:
+            response = model.generate_content(config["prompt"])
+            scripts[name] = {
+                "text": response.text,
+                "voice_id": config["voice_id"],
+                "label": config["label"],
+            }
+            print(f"  Done: {len(response.text)} chars")
+        except Exception as e:
+            print(f"  Gemini failed: {e}")
+            print("  Falling back to hardcoded scripts for all remaining.")
+            return get_hardcoded_scripts()
 
     return scripts
 
@@ -142,7 +147,7 @@ def synthesize_with_elevenlabs(scripts: dict):
 
     for name, script in scripts.items():
         output_path = DEMO_DIR / f"{name}.mp3"
-        print(f"Synthesizing: {name} → {output_path}")
+        print(f"Synthesizing: {name} -> {output_path}")
 
         try:
             audio = client.text_to_speech.convert(

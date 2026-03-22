@@ -86,9 +86,11 @@ class GeminiLiveSession:
         """
         self._chunk_count += 1
 
-        if self.mock_mode:
+        # Use mock for demo scenarios to conserve Gemini API quota (free tier = 20 req/day).
+        # Real Gemini is only used for live mic input (no scenario hint).
+        if self.mock_mode or scenario_hint:
             return self._mock_analyze(scenario_hint)
-        return await self._real_analyze(audio_chunk)
+        return await self._real_analyze(audio_chunk, scenario_hint)
 
     def _mock_analyze(self, scenario_hint: str) -> dict:
         hint = scenario_hint.lower()
@@ -201,7 +203,7 @@ class GeminiLiveSession:
             "mock": True,
         }
 
-    async def _real_analyze(self, audio_chunk: np.ndarray) -> dict:
+    async def _real_analyze(self, audio_chunk: np.ndarray, scenario_hint: str = "") -> dict:
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -241,10 +243,8 @@ class GeminiLiveSession:
                     await asyncio.sleep(wait)
                     continue
                 logger.error(f"Gemini analysis failed: {e}")
-                # Fall back to mock for this chunk
-                return self._mock_analyze(
-                    "bank" if self._chunk_count > 0 else ""
-                )
+                # Fall back to mock with correct scenario hint
+                return self._mock_analyze(scenario_hint)
 
     def reset(self):
         """Reset session state for a new call."""

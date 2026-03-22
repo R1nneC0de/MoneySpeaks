@@ -72,8 +72,12 @@ class ScamIntentClassifier:
         """Check if enough time has passed since last classification."""
         return time.time() - self._last_run >= self._run_interval
 
-    async def classify(self) -> Optional[dict]:
+    async def classify(self, force_mock: bool = False) -> Optional[dict]:
         """Run classification on accumulated transcript.
+
+        Args:
+            force_mock: If True, use mock classifier even if API key is set.
+                        Used during demos to conserve Gemini quota.
 
         Returns None if not enough time has passed or no transcript.
         """
@@ -84,7 +88,7 @@ class ScamIntentClassifier:
 
         self._last_run = time.time()
 
-        if self.mock_mode:
+        if self.mock_mode or force_mock:
             return self._mock_classify()
         return await self._real_classify()
 

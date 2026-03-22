@@ -95,7 +95,9 @@ async def process_audio_chunk(chunk, scenario_hint: str = "") -> dict:
     scam_classifier.add_transcript(transcript)
 
     # Run scam intent classifier (rate-limited internally)
-    scam_result = await scam_classifier.classify()
+    # Use mock for demos to conserve Gemini API quota
+    is_demo = bool(scenario_hint)
+    scam_result = await scam_classifier.classify(force_mock=is_demo)
     if scam_result is None:
         scam_result = {"risk": 0, "flags": [], "scam_type": "none", "mock": True}
 
